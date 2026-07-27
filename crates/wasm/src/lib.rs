@@ -6,6 +6,11 @@
 //! would cost more than the drawing does.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
+// Everything here needs a browser: a canvas context to measure text with, and a canvas to
+// draw on. Compiling to nothing on the host is what lets `cargo test --workspace` run the
+// core and renderer suites without a wasm target, rather than failing on an import that
+// only exists under `cfg(target_arch = "wasm32")`.
+#![cfg(target_arch = "wasm32")]
 
 mod measure;
 

@@ -15,6 +15,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod cull;
 pub mod record;
 
 #[cfg(target_arch = "wasm32")]
@@ -74,7 +75,37 @@ impl ImageSource for NoImages {
 }
 
 /// Draws a display list through a backend.
+///
+/// Commands that cannot affect a visible pixel are skipped — see [`cull`]. This never
+/// changes the output, and on a dense slide or a zoomed-in view it is the difference
+/// between holding a frame and not.
 pub fn render<R: Renderer>(
+    backend: &mut R,
+    dl: &DisplayList,
+    view: &View,
+) -> Result<(), R::Error> {
+    let root = view.transform_for(dl.width_pt, dl.height_pt);
+    backend.begin_frame(dl, root)?;
+    let (w, h) = view.canvas_pixels();
+    let mut culler = cull::Culler::new(
+        pptx_core::dl::Rect::new(0.0, 0.0, w as f32, h as f32),
+        root,
+    );
+    for cmd in &dl.commands {
+        if culler.should_skip(cmd) {
+            continue;
+        }
+        backend.execute(cmd)?;
+    }
+    backend.end_frame()
+}
+
+/// Draws a display list without culling.
+///
+/// Used by the recording backend when a trace is wanted for diagnosis: culling would make
+/// the trace depend on the viewport, and a trace that changes with the window size is
+/// useless for telling a layout bug from a rasterisation one.
+pub fn render_unculled<R: Renderer>(
     backend: &mut R,
     dl: &DisplayList,
     view: &View,

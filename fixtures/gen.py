@@ -533,6 +533,54 @@ def gen_m6() -> None:
     save(deck, "m6-large")
 
 
+# --------------------------------------------------------------------------- bench
+
+def gen_bench() -> None:
+    """Two stress decks for `npm run bench`. Not pixel-tested.
+
+    They probe the two axes that scale independently: how many slides a deck has, and how
+    much is on one slide. The first is cheap by construction because parsing is lazy; the
+    second is where the frame budget actually gets spent.
+    """
+    # Many slides, each ordinary.
+    deck = new_deck()
+    for i in range(250):
+        slide = deck.slides.add_slide(deck.slide_layouts[LAYOUT_TITLE_CONTENT])
+        slide.shapes.title.text = f"Slide {i + 1}"
+        body = slide.placeholders[1].text_frame
+        body.text = f"Point one on slide {i + 1}"
+        for j in range(6):
+            p = body.add_paragraph()
+            p.text = f"Supporting detail {j + 1}, with enough words on the line to require wrapping"
+            p.level = 1 if j % 2 else 0
+        for k in range(4):
+            s = slide.shapes.add_shape(
+                MSO_SHAPE.ROUNDED_RECTANGLE,
+                Inches(8.5), Inches(0.6 + k * 1.6), Inches(4.0), Inches(1.4),
+            )
+            s.fill.solid()
+            s.fill.fore_color.rgb = RGBColor(0x44 + k * 0x20, 0x72, 0xC4)
+            s.text_frame.text = f"Box {k + 1}"
+    save(deck, "bench-huge")
+
+    # One slide, 2000 shapes: the density case that decides whether a frame is held.
+    deck = new_deck()
+    slide = blank(deck)
+    for i in range(2000):
+        col, row = i % 50, i // 50
+        s = slide.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(0.05 + col * 0.26), Inches(0.05 + row * 0.18),
+            Inches(0.24), Inches(0.16),
+        )
+        s.fill.solid()
+        s.fill.fore_color.rgb = RGBColor((i * 7) % 255, (i * 13) % 255, (i * 29) % 255)
+        tf = s.text_frame
+        tf.text = str(i)
+        tf.paragraphs[0].font.size = Pt(6)
+    save(deck, "bench-dense")
+
+
 GENERATORS = {
     "m0": gen_m0,
     "m1": gen_m1,
@@ -543,11 +591,14 @@ GENERATORS = {
     "m5b": gen_m5b,
     "m5c": gen_m5c,
     "m6": gen_m6,
+    "bench": gen_bench,
 }
 
 
 def main(argv: list[str]) -> int:
-    wanted = [a for a in argv[1:] if not a.startswith("-")] or list(GENERATORS)
+    # The bench decks are large and slow to build, so they are opt-in.
+    default = [k for k in GENERATORS if k != "bench"]
+    wanted = [a for a in argv[1:] if not a.startswith("-")] or default
     unknown = [w for w in wanted if w not in GENERATORS]
     if unknown:
         print(f"unknown suite(s): {', '.join(unknown)}", file=sys.stderr)

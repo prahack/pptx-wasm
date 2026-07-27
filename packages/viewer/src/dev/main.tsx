@@ -9,6 +9,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { Presentation } from '../presentation.js';
 import { PresentationViewer, type PresentationViewerHandle } from '../react.js';
 import type { PresentationInfo } from '../types.js';
 
@@ -17,8 +18,13 @@ declare global {
     __pptxReady?: boolean;
     __pptxError?: string;
     __pptxTrace?: string;
+    /** Exposed for the benchmark, which drives the API layer directly. */
+    __pptx?: { Presentation: typeof Presentation };
   }
 }
+
+// The bench measures the API layer without React in the way, so it needs a handle on it.
+window.__pptx = { Presentation };
 
 const params = new URLSearchParams(location.search);
 const headless = params.get('headless') === '1';

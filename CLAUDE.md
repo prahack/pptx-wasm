@@ -37,6 +37,7 @@ property from one explicitly set to a default value: `<a:rPr b="0"/>` on a slide
 - Golden tests:    `npm run test:golden`   (regenerates fixtures, renders, diffs)
 - One suite:       `npm run test:golden -- --suite=m2`
 - Regen goldens:   `npm run goldens:update` (only after visual review)
+- Bench:           `npm run bench` (needs `npm run dev` running; `-- --fixture=bench-dense.pptx`)
 
 Toolchain the golden suite needs: `.venv` with `python-pptx` (fixture generation),
 LibreOffice (the oracle), `pdftoppm` from poppler (page rasterisation), Playwright
@@ -139,3 +140,44 @@ unsupported for exactly this reason.
 
 WebGPU text is optional to shipping. If it stalls, Canvas2D ships; the abstraction exists
 so that stays a cheap decision.
+
+---
+
+## Decision: no Web Worker  *(M6, settled — revisit if the numbers change)*
+
+**Decision: parsing and layout stay on the main thread. Culling was the win instead.**
+
+M6's task list included moving parsing and layout into a Web Worker. Measured on this
+machine (`npm run bench`, release wasm, headless Chromium), it is not warranted:
+
+| | 250-slide deck | 2000-shape slide |
+|---|---|---|
+| open + parse index | 16 ms | 12 ms |
+| first slide (layout + draw) | 17 ms | 81 ms |
+| navigate to an unvisited slide | 0.4 ms | — |
+| zoom (cached display list) | 0.1 ms | 14 ms |
+
+Slide count barely matters, because parsing is lazy: opening a deck reads the package
+index and `presentation.xml`, nothing else. The only figure near a frame budget is drawing
+a genuinely dense slide.
+
+**A worker would not have helped that figure.** The 14 ms is Canvas2D draw calls, and those
+have to happen on whichever thread owns the canvas — moving the work behind an
+`OffscreenCanvas` relocates the same milliseconds. What did help was
+`renderer::cull`: skipping commands that cannot affect a visible pixel took the dense
+slide's zoom from 17.6 ms to 13.8 ms, and the golden suite confirmed it changed no pixels
+(every suite's diff ratio was identical before and after).
+
+### When to revisit
+
+If any of these becomes true, the worker is back on the table:
+
+- Opening a deck exceeds ~100 ms — likely with very large embedded media, since the OPC
+  index is proportional to part count.
+- A single slide's *layout* (not its drawing) exceeds a frame. Layout is the part that
+  genuinely parallelises.
+- Text measurement stops being cacheable — a deck with thousands of distinct
+  (string, font) pairs would make `CanvasTextMeasure` chatty across the wasm boundary.
+
+`Presentation.measureCalls()` exists to catch the last one: if it keeps climbing across
+re-renders of the same slide, the metrics cache is being defeated.

@@ -243,10 +243,14 @@ fn fmt_path(p: &Path) -> String {
 }
 
 /// Convenience: render a display list to a trace string.
+///
+/// Deliberately unculled. A trace is a diagnostic, and one that omitted off-screen
+/// commands would change with the window size — exactly when you are trying to work out
+/// why something is not being drawn.
 pub fn trace(dl: &DisplayList, view: &pptx_core::dl::View) -> String {
     let mut r = RecordingRenderer::new();
     // The recording backend is infallible, so this cannot fail.
-    let _ = crate::render(&mut r, dl, view);
+    let _ = crate::render_unculled(&mut r, dl, view);
     r.finish()
 }
 
