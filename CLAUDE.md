@@ -55,11 +55,72 @@ degrades rather than failing outright — see "Testing philosophy".
 - Commit per task with a message referencing the milestone (e.g. "M2: paragraph wrapping").
 
 ## Testing philosophy
-- Oracle = headless LibreOffice PNG render. It is imperfect but consistent; treat large diffs as regressions, small ones as tolerance.
+- Oracle = headless LibreOffice PNG render. It is imperfect but consistent; treat large diffs as regressions, small ones as tolerance. See "why LibreOffice" below for what it is and is not authoritative about.
 - Add a fixture for every new feature BEFORE implementing it. Golden tests must stay green.
 - Per-suite tolerances live in `tests/golden/suites.json`, each with a written reason. Widening one is a decision to record, not a knob to turn.
 - `cargo test` covers layout logic against a synthetic measurer (`StubMeasure`), so it asserts *where the breaks fall* without depending on which fonts a machine has. Pixel fidelity is the golden suite's job.
 - When a golden diff appears, get `debugTrace()` for the slide first. It tells you in one look whether layout moved something or the rasteriser drew it differently — the most common ambiguity in this project.
+
+---
+
+## Decision: LibreOffice as the oracle  *(M0, settled — with a known gap)*
+
+**Decision: headless LibreOffice is the golden-test reference. It is authoritative where
+the spec is determinate and a second opinion where it is not.**
+
+### Why an oracle at all
+
+Without an independent reference, "does this render correctly?" resolves to the author's
+own judgement, which is the thing that drifts over a build this size. Unit tests can assert
+that a line breaks between word four and word five; they cannot tell you the whole deck
+looks wrong because tint is being computed in the wrong colour space.
+
+### Why LibreOffice
+
+Three constraints, and it is the only thing that meets all three:
+
+- **Headless and scriptable.** PowerPoint needs Windows, a licence and COM automation. It
+  cannot run in this loop at all.
+- **An independent implementation of the same spec.** This is the one that matters.
+  LibreOffice was written by people reading ECMA-376, not by us, so a disagreement means
+  one of us has misread it — and that is information. A self-snapshot baseline can only
+  tell you something *changed*, never that it was wrong from the first commit.
+- **Deterministic and version-pinnable.**
+
+The route is `.pptx → PDF → per-page PNG` via `pdftoppm`, because `--convert-to png` only
+renders the first slide.
+
+### What it has earned
+
+The linear-light tint bug. `m5a` was 36% off; rather than widen the tolerance, the oracle's
+banded-table pixels were sampled and the formula derived from them. They match `accent1`
+tinted in **linear** light on all six channels to within one count; the sRGB-byte lerp that
+was implemented is off by 20-30 per channel. That bug affected every banded table and every
+"Lighter 40%" theme colour in every deck, and reading the spec had already produced the
+wrong answer once — with a confident comment explaining why. It took an independent
+implementation disagreeing.
+
+### Where it is *not* authoritative
+
+`m5b` carries a 15% tolerance against 0.1% elsewhere. `chart.xml` holds data and formatting
+but no geometry, so LibreOffice picks its own axis scale, gap widths and label placement,
+none of which the file specifies. It chooses 200-unit ticks to 1600; we choose 500 to 1500.
+Neither is wrong.
+
+Hence the rule: authoritative for colours, positions, geometry and inheritance; a second
+opinion for auto-scaled chart axes, Gaussian blur radii and font hinting. That is why every
+tolerance in `suites.json` carries a written reason rather than only a number.
+
+### The known gap
+
+**Nothing here has been validated against PowerPoint itself.** That leaves a class of error
+uncaught: cases where LibreOffice and this renderer are wrong in the same way, or where the
+implementation has been tuned toward LibreOffice's quirks.
+
+The fix is cheap and worth doing on the milestones where fidelity matters most: export
+`m2-text.pptx` and `m4-template.pptx` from real PowerPoint, keep the PNGs, and spot-check
+them against `tests/golden/out/actual/` by eye. Do this before trusting a tolerance that
+had to be widened.
 
 ---
 
