@@ -35,7 +35,8 @@
       "Bash(./.venv/bin/python -c ' *)",
       "Bash(node tests/golden/run.mjs --suite=m0)",
       "Bash(git add *)",
-      "Bash(git -c user.name=Claude -c user.email=noreply@anthropic.com commit -q -m ' *)"
+      "Bash(git -c user.name=Claude -c user.email=noreply@anthropic.com commit -q -m ' *)",
+      "Bash(./.venv/bin/python fixtures/gen.py m5b)"
     ]
   }
 }

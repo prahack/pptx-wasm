@@ -4,6 +4,7 @@
 //! commands. It never touches a canvas, a font file, or a pixel — measurement comes in
 //! through a [`TextMeasure`], and everything goes out as a display list.
 
+pub mod chart;
 pub mod geom;
 pub mod inherit;
 pub mod paint;
@@ -406,10 +407,24 @@ fn emit_graphic(
             &mut dl.commands,
         ),
         GraphicContent::Chart(rid) => {
-            // Charts arrive in M5b. Until then a frame is drawn so the slide's structure
-            // is still legible instead of a blank gap.
-            log::debug!("chart {rid} on {} not rendered yet", shape.name);
-            placeholder_frame(box_rect, dl);
+            // The chart part hangs off the slide, so the relationship resolves against
+            // `part` rather than against the chart's own name.
+            let target = ctx.pres.package().resolve_target(part, rid);
+            match target.and_then(|t| ctx.pres.chart(&t).map(|c| (t, c))) {
+                Some((chart_part, chart)) => chart::layout_chart(
+                    &chart,
+                    box_rect,
+                    ctx.resolver,
+                    ctx.pres,
+                    ctx.measure,
+                    &chart_part,
+                    &mut dl.commands,
+                ),
+                None => {
+                    log::debug!("chart {rid} on {} does not resolve", shape.name);
+                    placeholder_frame(box_rect, dl);
+                }
+            }
         }
         GraphicContent::Unsupported { kind, .. } => {
             log::debug!("graphic {kind:?} on {} is not supported", shape.name);

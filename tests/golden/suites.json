@@ -4,7 +4,7 @@
     "",
     "`maxDiffRatio` is the fraction of pixels allowed to differ by more than",
     "`threshold` (pixelmatch's 0..1 perceptual distance). Every tolerance has a written",
-    "reason. Widening one is a decision to record here, not a knob to turn quietly — if a",
+    "reason. Widening one is a decision to record here, not a knob to turn quietly \u2014 if a",
     "diff grows, the first question is whether the viewer regressed, and the second is",
     "whether the oracle is the thing that is wrong.",
     "",
@@ -55,6 +55,12 @@
       "fixture": "m5a-tables.pptx",
       "maxDiffRatio": 0.06,
       "reason": "Table borders land on half-pixel boundaries and LibreOffice snaps them differently, so every rule contributes a line of differing pixels. Cell text carries the rest."
+    },
+    {
+      "id": "m5b",
+      "fixture": "m5b-charts.pptx",
+      "maxDiffRatio": 0.15,
+      "reason": "Deliberately the loosest suite. chart.xml carries data and formatting but no geometry, so every renderer computes the plot itself: LibreOffice picks its own axis scale, gap widths, label placement and legend metrics, and none of those are specified by the file. The structural things this suite actually guards are that the right number of bars/wedges appear, in the right order, with distinct series colours, inside the frame \u2014 a regression in any of those blows well past this figure. Judge it by the trend and by looking at the diff, not by the number alone."
     },
     {
       "id": "m5c",

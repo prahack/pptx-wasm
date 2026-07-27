@@ -385,6 +385,60 @@ def gen_m5a() -> None:
     save(deck, "m5a-tables")
 
 
+# --------------------------------------------------------------------------- m5b
+
+def gen_m5b() -> None:
+    """Charts: clustered bar, line, and pie, with axes and legends.
+
+    python-pptx writes the same `<c:numCache>`/`<c:strCache>` blocks PowerPoint does, so
+    this exercises the code path a real deck takes — the cached values, not the embedded
+    workbook.
+    """
+    from pptx.chart.data import CategoryChartData
+    from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+
+    deck = new_deck()
+
+    # Clustered column with two series.
+    slide = blank(deck)
+    data = CategoryChartData()
+    data.categories = ["North", "South", "East", "West"]
+    data.add_series("2023", (1204, 988, 1455, 720))
+    data.add_series("2024", (1388, 1022, 1390, 804))
+    frame = slide.shapes.add_chart(
+        XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(0.6), Inches(0.6), Inches(7.5), Inches(5.0), data
+    )
+    chart = frame.chart
+    chart.has_legend = True
+    chart.legend.position = XL_LEGEND_POSITION.BOTTOM
+    chart.legend.include_in_layout = False
+    chart.has_title = True
+    chart.chart_title.text_frame.text = "Revenue by region"
+
+    # Line chart on the same slide, so one golden covers both.
+    line_data = CategoryChartData()
+    line_data.categories = ["Q1", "Q2", "Q3", "Q4"]
+    line_data.add_series("Margin", (12.4, 13.1, 12.8, 14.6))
+    line_frame = slide.shapes.add_chart(
+        XL_CHART_TYPE.LINE_MARKERS, Inches(8.4), Inches(0.6), Inches(4.4), Inches(2.4), line_data
+    )
+    line_frame.chart.has_legend = False
+
+    # Pie, which has no axes and colours per point.
+    pie_data = CategoryChartData()
+    pie_data.categories = ["Enterprise", "Mid-market", "SMB"]
+    pie_data.add_series("Mix", (0.55, 0.28, 0.17))
+    pie_frame = slide.shapes.add_chart(
+        XL_CHART_TYPE.PIE, Inches(8.4), Inches(3.3), Inches(4.4), Inches(2.3), pie_data
+    )
+    pie_chart = pie_frame.chart
+    pie_chart.has_legend = True
+    pie_chart.legend.position = XL_LEGEND_POSITION.RIGHT
+    pie_chart.legend.include_in_layout = False
+
+    save(deck, "m5b-charts")
+
+
 # --------------------------------------------------------------------------- m5c
 
 def gen_m5c() -> None:
@@ -486,6 +540,7 @@ GENERATORS = {
     "m3": gen_m3,
     "m4": gen_m4,
     "m5a": gen_m5a,
+    "m5b": gen_m5b,
     "m5c": gen_m5c,
     "m6": gen_m6,
 }

@@ -1,6 +1,7 @@
 //! The presentation model. Everything here is in EMUs and unresolved property terms;
 //! nothing knows about pixels, canvases, or the theme a given shape will end up under.
 
+pub mod chart;
 pub mod color;
 pub mod fill;
 pub mod geometry;
@@ -19,6 +20,7 @@ pub use shape::{
     Background, ColorMap, Placeholder, PlaceholderType, Shape, ShapeKind, ShapeTree, Slide,
     SlideLayout, SlideMaster,
 };
+pub use chart::Chart;
 pub use table::{Table, TableCell, TableRow};
 pub use table_style::{CellPosition, PartStyle, TableStyle, TableStyles};
 pub use text::{BodyProps, ListStyle, Paragraph, ParagraphProps, Run, RunProps, TextBody};
@@ -65,6 +67,7 @@ pub struct Presentation {
     pub(crate) media: RefCell<MediaRegistry>,
     /// `ppt/tableStyles.xml`, parsed on first use. Decks without a table never pay for it.
     pub(crate) table_styles: RefCell<Option<Rc<TableStyles>>>,
+    pub(crate) chart_cache: RefCell<HashMap<String, Rc<Chart>>>,
 }
 
 impl Presentation {
@@ -83,7 +86,21 @@ impl Presentation {
             theme_cache: RefCell::new(HashMap::new()),
             media: RefCell::new(MediaRegistry::new()),
             table_styles: RefCell::new(None),
+            chart_cache: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Parses (or returns the cached) chart part.
+    pub fn chart(&self, part: &str) -> Option<Rc<Chart>> {
+        if let Some(hit) = self.chart_cache.borrow().get(part) {
+            return Some(Rc::clone(hit));
+        }
+        let bytes = self.package.part(part)?;
+        let parsed = Rc::new(crate::parse::chart::parse_chart(&bytes));
+        self.chart_cache
+            .borrow_mut()
+            .insert(part.to_string(), Rc::clone(&parsed));
+        Some(parsed)
     }
 
     /// The deck's table styles.
