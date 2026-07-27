@@ -1,0 +1,12 @@
+/target
+**/node_modules
+/packages/viewer/dist
+/packages/viewer/pkg
+/crates/wasm/pkg
+/.venv
+/fixtures/generated
+/fixtures/goldens
+/tests/golden/out
+/tests/golden/.oracle-cache
+*.tsbuildinfo
+.DS_Store

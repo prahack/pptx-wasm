@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(wasm-pack --version)",
+      "Bash(npm --version)",
+      "Bash(python3 -c \"import pptx; print\\('python-pptx', pptx.__version__\\)\")",
+      "Read(//Applications/LibreOffice.app/Contents/MacOS/**)",
+      "Read(//Users/prabhanu/.cargo/**)",
+      "Read(//Users/prabhanu/**)",
+      "Bash(brew --version)",
+      "Bash(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)",
+      "Bash(sh -s -- -y --profile minimal --default-toolchain stable)",
+      "Bash(brew install *)",
+      "Bash(wasm-opt --version)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(./.venv/bin/pip install *)",
+      "Bash(./.venv/bin/python -c \"import pptx, PIL; print\\('python-pptx', pptx.__version__, '| Pillow', PIL.__version__\\)\")",
+      "Bash(/Applications/LibreOffice.app/Contents/MacOS/soffice --version)",
+      "Bash(git init *)",
+      "Bash(:)",
+      "Bash(python3 -)",
+      "Bash(awk '{print $1\" bytes gzipped\"}')",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(python3 -c ' *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(./.venv/bin/python fixtures/gen.py)",
+      "Bash(npx playwright *)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(./.venv/bin/python -c ' *)",
+      "Bash(node tests/golden/run.mjs --suite=m0)",
+      "Bash(git add *)",
+      "Bash(git -c user.name=Claude -c user.email=noreply@anthropic.com commit -q -m ' *)"
+    ]
+  }
+}

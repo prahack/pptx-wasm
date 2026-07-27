@@ -1,0 +1,36 @@
+[package]
+name = "pptx-renderer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Renderer trait and backends for the pptx display list"
+
+[dependencies]
+pptx-core.workspace = true
+log.workspace = true
+
+# Browser backends only. Keeping these behind the target cfg is what lets
+# `cargo test --workspace` run the layout and recording tests on the host.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys = { workspace = true, features = [
+  "CanvasGradient",
+  "CanvasRenderingContext2d",
+  "CanvasWindingRule",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "HtmlImageElement",
+  "ImageBitmap",
+  "OffscreenCanvas",
+  "Path2d",
+  "TextMetrics",
+  "Window",
+] }
+
+[features]
+default = []
+# The WebGPU backend is opt-in while it is a stub, so nothing links it by accident.
+webgpu = []

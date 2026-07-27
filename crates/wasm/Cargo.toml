@@ -1,0 +1,47 @@
+[package]
+name = "pptx-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "wasm-bindgen entry point for the pptx viewer"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pptx-core.workspace = true
+pptx-renderer.workspace = true
+log.workspace = true
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys = { workspace = true, features = [
+  "CanvasRenderingContext2d",
+  "Document",
+  "HtmlCanvasElement",
+  "HtmlImageElement",
+  "ImageBitmap",
+  "OffscreenCanvas",
+  "OffscreenCanvasRenderingContext2d",
+  "TextMetrics",
+  "Window",
+  "console",
+] }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+# rustc emits bulk-memory instructions by default now, so wasm-opt has to be told to
+# accept them. Without these flags it refuses to validate its own input.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false
+
+[features]
+default = ["panic-hook"]
+# Routes Rust panics to console.error. Small, and the difference between a useful bug
+# report and "the wasm module trapped".
+panic-hook = ["dep:console_error_panic_hook"]
+# Spike A's alternative: in-Rust shaping and metrics via cosmic-text, for deterministic
+# cross-browser text. Off by default — see the decision recorded in CLAUDE.md.
+text-cosmic = []

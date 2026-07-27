@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/renderer", "crates/wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.82"
+
+[workspace.dependencies]
+pptx-core = { path = "crates/core" }
+pptx-renderer = { path = "crates/renderer" }
+
+quick-xml = { version = "0.37", default-features = false }
+# Only `deflate` — no aes, bzip2, zstd, lzma, xz, or time. Those are most of zip's
+# default surface and none of it appears in a `.pptx`.
+#
+# `deflate` also drags in zopfli, a *compressor* a read-only viewer can never call. It
+# cannot be excluded (zip's `deflate-flate2` does not activate the flate2 dependency on
+# its own), but LTO drops it: nothing in this crate constructs a `ZipWriter`.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+log = "0.4"
+
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = "0.3"
+
+# Release profile tuned for WASM payload size. `opt-level = "s"` beats "z" for us:
+# "z" disables loop vectorisation, which costs more in parse throughput than it
+# saves in bytes (measured in M0, see CLAUDE.md).
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

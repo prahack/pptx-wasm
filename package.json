@@ -1,0 +1,27 @@
+{
+  "name": "pptx-viewer-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/viewer"
+  ],
+  "scripts": {
+    "wasm": "wasm-pack build crates/wasm --target web --out-dir pkg --out-name pptx",
+    "wasm:dev": "wasm-pack build crates/wasm --dev --target web --out-dir pkg --out-name pptx",
+    "dev": "npm run wasm && npm run dev --workspace packages/viewer",
+    "build": "npm run wasm && npm run build --workspace packages/viewer",
+    "test:rust": "cargo test --workspace",
+    "fixtures": "./.venv/bin/python fixtures/gen.py",
+    "goldens": "node tests/golden/oracle.mjs",
+    "test:golden": "node tests/golden/run.mjs",
+    "goldens:update": "node tests/golden/run.mjs --update",
+    "test": "npm run test:rust && npm run test:golden",
+    "bench": "node tests/golden/bench.mjs"
+  },
+  "devDependencies": {
+    "pixelmatch": "^6.0.0",
+    "playwright": "^1.49.0",
+    "pngjs": "^7.0.0"
+  }
+}

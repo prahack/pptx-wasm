@@ -1,0 +1,16 @@
+[package]
+name = "pptx-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "OOXML .pptx parsing, presentation model, and layout to a backend-agnostic display list"
+
+[dependencies]
+quick-xml.workspace = true
+zip.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# Fixtures are byte-for-byte .pptx files built in-memory by the test helpers.
+zip.workspace = true
