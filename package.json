@@ -18,7 +18,8 @@
     "goldens:update": "node tests/golden/run.mjs --update",
     "test": "npm run test:rust && npm run test:golden && npm run test:browsers",
     "bench": "node tests/golden/bench.mjs",
-    "test:browsers": "node tests/golden/browsers.mjs"
+    "test:browsers": "node tests/golden/browsers.mjs",
+    "compare": "node tests/golden/compare.mjs"
   },
   "devDependencies": {
     "pixelmatch": "^6.0.0",
