@@ -16,33 +16,22 @@
 
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { PNG } from 'pngjs';
 
+import { BASE, ROOT, ensureServer } from './server.mjs';
+
 const exec = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
-const PORT = 5178;
-const BASE = `http://localhost:${PORT}`;
-const SERVER_MARKER = '<title>pptx-viewer dev</title>';
 
 const config = JSON.parse(readFileSync(join(HERE, 'suites.json'), 'utf8'));
 const only = process.argv
   .find((a) => a.startsWith('--suite='))
   ?.slice('--suite='.length);
 const suites = config.suites.filter((s) => !only || s.id === only);
-
-async function isUp() {
-  try {
-    const res = await fetch(BASE, { signal: AbortSignal.timeout(1500) });
-    return res.ok && (await res.text()).includes(SERVER_MARKER);
-  } catch {
-    return false;
-  }
-}
 
 async function ensureFixtures() {
   const python = join(ROOT, '.venv/bin/python');
@@ -103,12 +92,8 @@ async function main() {
     console.error('No WASM build found. Run `npm run wasm` first.');
     process.exit(2);
   }
-  if (!(await isUp())) {
-    console.error(`The dev server is not running on ${BASE}. Start it with \`npm run dev\`.`);
-    process.exit(2);
-  }
-
   const playwright = await import('playwright');
+  const server = await ensureServer();
   const engines = [
     ['chromium', playwright.chromium, 'Chrome / Edge'],
     ['firefox', playwright.firefox, 'Firefox'],
@@ -118,6 +103,7 @@ async function main() {
   const results = [];
   let failed = false;
 
+  try {
   for (const [id, type, label] of engines) {
     let browser;
     try {
@@ -150,6 +136,9 @@ async function main() {
     } finally {
       await browser.close();
     }
+  }
+  } finally {
+    server.stop();
   }
 
   // --- report -----------------------------------------------------------------

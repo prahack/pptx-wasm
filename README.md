@@ -68,8 +68,12 @@ outright, so you can work on the Rust without the whole toolchain installed.
 | `npm run test:golden` | render every fixture and pixel-diff against LibreOffice |
 | `npm run test:golden -- --suite=m2` | one suite |
 | `npm run test:browsers` | render every fixture in Chromium, Firefox and WebKit |
-| `npm run bench` | performance numbers (needs `npm run dev` running) |
+| `npm run bench` | performance numbers |
 | `npm run fixtures` | regenerate the `.pptx` fixtures |
+| `npm test` | all three test layers in sequence |
+
+The browser-driven commands start a dev server if one is not already up, and leave a
+server you started yourself alone.
 
 ## Testing
 

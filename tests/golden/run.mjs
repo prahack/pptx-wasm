@@ -32,17 +32,13 @@ import { promisify } from 'node:util';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
-import { findTools, renderFixture, FIXTURES, ROOT } from './oracle.mjs';
+import { findTools, renderFixture, ROOT } from './oracle.mjs';
+import { BASE, ensureServer } from './server.mjs';
 
 const exec = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'out');
 const REFERENCE = join(OUT, 'reference');
-const PORT = 5178;
-const BASE = `http://localhost:${PORT}`;
-/** Identifies our dev server, so another project's is never mistaken for it. */
-const SERVER_MARKER = '<title>pptx-viewer dev</title>';
-
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--suite='))?.slice('--suite='.length);
 const update = args.includes('--update');
@@ -69,57 +65,6 @@ async function ensureFixtures() {
   }
   await exec(python, [join(ROOT, 'fixtures/gen.py')], { cwd: ROOT, timeout: 300_000 });
 }
-
-// --------------------------------------------------------------------- dev server
-
-async function startServer() {
-  // Reuse an already-running dev server if there is one, so a developer with `npm run
-  // dev` open does not get a port clash.
-  if (await isUp()) {
-    console.log(`Using the dev server already listening on ${BASE}`);
-    return null;
-  }
-  const child = spawn('npm', ['run', 'dev', '--workspace', 'packages/viewer'], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, BROWSER: 'none' },
-  });
-  let stderr = '';
-  child.stderr.on('data', (d) => {
-    stderr += String(d);
-  });
-
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline) {
-    if (await isUp()) return child;
-    if (child.exitCode !== null) {
-      throw new Error(`the dev server exited (${child.exitCode}):\n${stderr}`);
-    }
-    await sleep(250);
-  }
-  child.kill();
-  throw new Error(`the dev server did not come up on ${BASE} within 60s:\n${stderr}`);
-}
-
-/**
- * True when *our* dev server is on the port.
- *
- * Checking only that something answers is not enough: 5173 and friends are routinely
- * occupied by an unrelated project's Vite server, and reusing one silently screenshots
- * the wrong application. The page's title is the cheapest reliable marker.
- */
-async function isUp() {
-  try {
-    const res = await fetch(BASE, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) return false;
-    const html = await res.text();
-    return html.includes(SERVER_MARKER);
-  } catch {
-    return false;
-  }
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --------------------------------------------------------------------- rendering
 
@@ -268,7 +213,7 @@ async function main() {
     process.exit(2);
   }
 
-  const server = await startServer();
+  const server = await ensureServer();
   rmSync(join(OUT, 'actual'), { recursive: true, force: true });
   rmSync(join(OUT, 'diff'), { recursive: true, force: true });
   mkdirSync(join(OUT, 'actual'), { recursive: true });
@@ -376,7 +321,7 @@ async function main() {
     }
   } finally {
     await browser.close();
-    if (server && !keepServer) server.kill();
+    if (!keepServer) server.stop();
   }
 
   report(results, haveOracle);

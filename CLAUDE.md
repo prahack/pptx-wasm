@@ -37,7 +37,10 @@ property from one explicitly set to a default value: `<a:rPr b="0"/>` on a slide
 - Golden tests:    `npm run test:golden`   (regenerates fixtures, renders, diffs)
 - One suite:       `npm run test:golden -- --suite=m2`
 - Regen goldens:   `npm run goldens:update` (only after visual review)
-- Bench:           `npm run bench` (needs `npm run dev` running; `-- --fixture=bench-dense.pptx`)
+- Cross-browser:   `npm run test:browsers` (Chromium, Firefox, WebKit)
+- Bench:           `npm run bench`  (`-- --fixture=bench-dense.pptx` for the dense case)
+
+The browser-driven commands start a dev server themselves if one is not already running.
 
 Toolchain the golden suite needs: `.venv` with `python-pptx` (fixture generation),
 LibreOffice (the oracle), `pdftoppm` from poppler (page rasterisation), Playwright

@@ -13,16 +13,12 @@
 
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { BASE, ROOT, ensureServer } from './server.mjs';
+
 const exec = promisify(execFile);
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
-const PORT = 5178;
-const BASE = `http://localhost:${PORT}`;
-const SERVER_MARKER = '<title>pptx-viewer dev</title>';
 
 const args = process.argv.slice(2);
 const fixture = args.find((a) => a.startsWith('--fixture='))?.slice('--fixture='.length)
@@ -43,16 +39,6 @@ const TARGETS = {
   navigate: 33,
   zoom: 16.7,
 };
-
-async function isUp() {
-  try {
-    const res = await fetch(BASE, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) return false;
-    return (await res.text()).includes(SERVER_MARKER);
-  } catch {
-    return false;
-  }
-}
 
 async function ensureFixture() {
   const path = join(ROOT, 'fixtures/generated', fixture);
@@ -156,14 +142,7 @@ async function main() {
     process.exit(2);
   }
 
-  if (!(await isUp())) {
-    console.error(
-      `The dev server is not running on ${BASE}.\n` +
-        'Start it with `npm run dev` and re-run the bench.',
-    );
-    process.exit(2);
-  }
-
+  const server = await ensureServer();
   const browser = await playwright.chromium.launch();
   const results = [];
   try {
@@ -176,6 +155,7 @@ async function main() {
     }
   } finally {
     await browser.close();
+    server.stop();
   }
 
   const first = results[0];
