@@ -11,19 +11,33 @@
  *    first-time visitor waits for.
  *  - **Warm** open+render, opening further decks in the same page. This is what someone
  *    browsing several files experiences.
- *  - **Accuracy**, by screenshotting the result and diffing it against the same
+ *  - **Accuracy**, by screenshotting *every* slide and diffing each against the same
  *    LibreOffice render the golden suite uses. Both engines are judged by an
  *    implementation neither of them wrote, which is the only way this number means
  *    anything coming from the author of one of them.
+ *
+ *    Every slide, not just the first: slide 1 is usually the title slide, the simplest
+ *    in the deck, and scoring only that understates how far two renderers diverge. On
+ *    the m4 template, for instance, the engines look near-identical on slide 1 and very
+ *    different on slide 2.
  *
  * Payload is measured from what each package actually ships.
  *
  *   npm run compare
  *   npm run compare -- --runs=5 --suite=m2
+ *   npm run compare -- --file=~/decks/quarterly.pptx     # score your own deck
  */
 
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,10 +59,34 @@ const MARKER = '<title>pptx renderer comparison</title>';
 
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--suite='))?.slice('--suite='.length);
+const customFile = args.find((a) => a.startsWith('--file='))?.slice('--file='.length);
 const runs = Number.parseInt(args.find((a) => a.startsWith('--runs='))?.slice('--runs='.length) ?? '3', 10);
 
 const config = JSON.parse(readFileSync(join(HERE, 'suites.json'), 'utf8'));
-const suites = config.suites.filter((s) => !only || s.id === only);
+
+/**
+ * The decks to compare.
+ *
+ * `--file` swaps the bundled fixtures for one of your own. It is copied next to them so
+ * the dev server and the LibreOffice oracle can both reach it by the same path, and it
+ * gets the default tolerance since suites.json has no entry for it.
+ */
+function resolveSuites() {
+  if (!customFile) return config.suites.filter((s) => !only || s.id === only);
+
+  const source = customFile.startsWith('~') ? join(homedir(), customFile.slice(1)) : customFile;
+  if (!existsSync(source)) {
+    console.error(`No such file: ${source}`);
+    process.exit(2);
+  }
+  const name = source.split('/').pop() ?? 'custom.pptx';
+  const dest = join(ROOT, 'fixtures/generated', name);
+  mkdirSync(join(ROOT, 'fixtures/generated'), { recursive: true });
+  if (dest !== source) copyFileSync(source, dest);
+  return [{ id: 'custom', fixture: name, custom: true }];
+}
+
+const suites = resolveSuites();
 
 const ENGINES = [
   { id: 'ours', label: 'pptx-viewer (this project)' },
@@ -143,7 +181,7 @@ async function ensureComparisonServer() {
 
 // --------------------------------------------------------------------- measure
 
-async function measureEngine(browser, engine, fixture, width, height) {
+async function measureEngine(browser, engine, fixture, width, height, slideCount) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
@@ -159,7 +197,6 @@ async function measureEngine(browser, engine, fixture, width, height) {
     if (failure) return { error: failure, errors };
 
     const cold = await page.evaluate(() => window.__cmpTiming);
-    const shot = await page.locator('[data-engine]').screenshot({ type: 'png' });
 
     // Warm: the module is instantiated and the bundle is hot, so this is the cost of
     // opening the next deck rather than the first.
@@ -169,7 +206,16 @@ async function measureEngine(browser, engine, fixture, width, height) {
       if (t) warm.push(t.totalMs);
     }
 
-    return { cold, warm, shot, errors };
+    // One screenshot per slide. The engines may disagree about the slide count; render
+    // what this one believes it has, and let the caller notice the disagreement.
+    const shots = [];
+    const count = Math.min(cold?.slideCount ?? 1, slideCount);
+    for (let i = 0; i < count; i++) {
+      await page.evaluate((n) => window.__cmpRun?.(n), i);
+      shots.push(await page.locator('[data-engine]').screenshot({ type: 'png' }));
+    }
+
+    return { cold, warm, shots, slideCount: cold?.slideCount ?? 1, errors };
   } catch (e) {
     return { error: e.message.split('\n')[0], errors };
   } finally {
@@ -177,7 +223,24 @@ async function measureEngine(browser, engine, fixture, width, height) {
   }
 }
 
-/** Fraction of pixels differing from the oracle. Lower is more accurate. */
+/** True when a pixel carries content rather than being background. */
+function isInked(data, i) {
+  return data[i + 3] > 8 && (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245);
+}
+
+/**
+ * How far a render is from the oracle, by two measures.
+ *
+ * `ratio` is the fraction of the whole canvas that differs — the conventional number, and
+ * the one the golden suite's tolerances are written against.
+ *
+ * `inkRatio` divides the same difference by the number of pixels that carry content in
+ * *either* image. That second number exists because the first one lies about text. A
+ * slide is mostly white and glyphs are thin strokes, so a body-text block rendered at the
+ * wrong size in the wrong place — obviously broken to a human — moves the canvas-relative
+ * figure by about one percent and reads as "nearly perfect". Measured against the content
+ * rather than the canvas, the same error reads as the large error it is.
+ */
 function accuracyVsOracle(shot, goldenPath, threshold) {
   if (!existsSync(goldenPath)) return null;
   const actual = PNG.sync.read(shot);
@@ -190,7 +253,19 @@ function accuracyVsOracle(shot, goldenPath, threshold) {
     threshold,
     includeAA: false,
   });
-  return { ratio: differing / (actual.width * actual.height), diff };
+
+  let inked = 0;
+  for (let i = 0; i < actual.data.length; i += 4) {
+    if (isInked(actual.data, i) || isInked(expected.data, i)) inked++;
+  }
+
+  const total = actual.width * actual.height;
+  return {
+    ratio: differing / total,
+    // A blank slide that matches has no content to be wrong about.
+    inkRatio: inked > 0 ? Math.min(1, differing / inked) : 0,
+    diff,
+  };
 }
 
 const median = (xs) => {
@@ -206,9 +281,13 @@ const pct = (v) => (v == null ? '—' : `${(v * 100).toFixed(2)}%`);
 // --------------------------------------------------------------------- main
 
 async function main() {
+  // Regenerating fixtures would be wasted work — and would not produce a custom deck.
   const python = join(ROOT, '.venv/bin/python');
-  if (existsSync(python)) {
+  if (!customFile && existsSync(python)) {
     await exec(python, [join(ROOT, 'fixtures/gen.py')], { cwd: ROOT, timeout: 300_000 });
+  }
+  if (customFile) {
+    console.log(`\nComparing your deck: ${suites[0].fixture}\n`);
   }
   if (!existsSync(join(ROOT, 'packages/viewer/dist/pptx_bg.wasm'))) {
     console.error('Build the package first:  npm run wasm && npm run build --workspace packages/viewer');
@@ -234,46 +313,69 @@ async function main() {
       const height = suite.height ?? config.defaults.height;
       const threshold = suite.threshold ?? config.defaults.threshold;
 
-      let golden = null;
+      let goldens = [];
       if (haveOracle) {
         try {
-          const pages = await renderFixture(suite.fixture, { width, height, tools });
-          golden = pages[0] ?? null;
+          goldens = await renderFixture(suite.fixture, { width, height, tools });
         } catch {
-          golden = null;
+          goldens = [];
         }
       }
 
       for (const engine of ENGINES) {
         process.stdout.write(`  ${suite.id} / ${engine.id} … `);
-        const result = await measureEngine(browser, engine.id, suite.fixture, width, height);
+        const result = await measureEngine(
+          browser,
+          engine.id,
+          suite.fixture,
+          width,
+          height,
+          goldens.length || 1,
+        );
         if (result.error) {
           console.log(`failed: ${result.error}`);
           rows.push({ suite: suite.id, engine: engine.id, error: result.error });
           continue;
         }
-        writeFileSync(join(OUT, `${suite.id}-${engine.id}.png`), result.shot);
 
-        let accuracy = null;
-        if (golden) {
-          const cmp = accuracyVsOracle(result.shot, golden, threshold);
+        const perSlide = [];
+        for (let i = 0; i < result.shots.length; i++) {
+          writeFileSync(join(OUT, `${suite.id}-${engine.id}-s${i + 1}.png`), result.shots[i]);
+          const goldenPath = goldens[i];
+          if (!goldenPath) continue;
+          const cmp = accuracyVsOracle(result.shots[i], goldenPath, threshold);
           if (cmp?.diff) {
-            writeFileSync(join(OUT, `${suite.id}-${engine.id}-diff.png`), PNG.sync.write(cmp.diff));
+            writeFileSync(
+              join(OUT, `${suite.id}-${engine.id}-s${i + 1}-diff.png`),
+              PNG.sync.write(cmp.diff),
+            );
           }
-          accuracy = cmp;
+          if (cmp?.ratio != null) perSlide.push({ ratio: cmp.ratio, ink: cmp.inkRatio });
         }
+
+        // Mean across slides *and* the worst, because an engine that nails the title
+        // slide and mangles the content slide averages out to looking fine.
+        const avg = (f) => (perSlide.length ? perSlide.reduce((a, b) => a + f(b), 0) / perSlide.length : null);
+        const mean = avg((s) => s.ratio);
+        const meanInk = avg((s) => s.ink);
+        const worstInk = perSlide.length ? Math.max(...perSlide.map((s) => s.ink)) : null;
 
         rows.push({
           suite: suite.id,
           engine: engine.id,
           cold: result.cold?.totalMs,
           warm: median(result.warm),
-          accuracy: accuracy?.ratio,
-          sizeMismatch: accuracy?.sizeMismatch,
+          accuracy: mean,
+          ink: meanInk,
+          worstInk,
+          slides: perSlide.length,
+          slideCount: result.slideCount,
         });
         console.log(
           `cold ${ms(result.cold?.totalMs)}  warm ${ms(median(result.warm))}` +
-            (accuracy?.ratio != null ? `  vs-oracle ${pct(accuracy.ratio)}` : ''),
+            (mean != null
+              ? `  canvas ${pct(mean)}  content ${pct(meanInk)} (worst ${pct(worstInk)}) over ${perSlide.length} slide(s)`
+              : ''),
         );
       }
     }
@@ -298,19 +400,29 @@ function report(rows, payload, haveOracle) {
   console.log('\n' + '='.repeat(78));
   console.log('PER FIXTURE');
   console.log('='.repeat(78));
+  const w = Math.max(8, ...rows.map((r) => r.suite.length));
   const head = haveOracle
-    ? `  ${'fixture'.padEnd(8)} ${'engine'.padEnd(14)} ${'cold'.padStart(10)} ${'warm'.padStart(10)} ${'vs oracle'.padStart(11)}`
-    : `  ${'fixture'.padEnd(8)} ${'engine'.padEnd(14)} ${'cold'.padStart(10)} ${'warm'.padStart(10)}`;
+    ? `  ${'fixture'.padEnd(w)} ${'engine'.padEnd(14)} ${'cold'.padStart(9)} ${'warm'.padStart(9)} ${'canvas'.padStart(9)} ${'content'.padStart(9)}`
+    : `  ${'fixture'.padEnd(w)} ${'engine'.padEnd(14)} ${'cold'.padStart(9)} ${'warm'.padStart(9)}`;
   console.log(head);
+  if (haveOracle) {
+    console.log(
+      `  ${''.padEnd(w)} ${''.padEnd(14)} ${''.padStart(9)} ${''.padStart(9)}` +
+        `  % of slide  % of content`,
+    );
+  }
 
   for (const r of rows) {
     if (r.error) {
-      console.log(`  ${r.suite.padEnd(8)} ${r.engine.padEnd(14)} FAILED: ${r.error}`);
+      console.log(`  ${r.suite.padEnd(w)} ${r.engine.padEnd(14)} FAILED: ${r.error}`);
       continue;
     }
-    const acc = r.sizeMismatch ? `size! ` : pct(r.accuracy);
-    const line = `  ${r.suite.padEnd(8)} ${r.engine.padEnd(14)} ${ms(r.cold).padStart(10)} ${ms(r.warm).padStart(10)}`;
-    console.log(haveOracle ? `${line} ${acc.padStart(11)}` : line);
+    const line = `  ${r.suite.padEnd(w)} ${r.engine.padEnd(14)} ${ms(r.cold).padStart(9)} ${ms(r.warm).padStart(9)}`;
+    console.log(
+      haveOracle
+        ? `${line} ${(r.sizeMismatch ? 'size!' : pct(r.accuracy)).padStart(9)} ${pct(r.ink).padStart(9)}`
+        : line,
+    );
   }
 
   // Aggregate, counting only fixtures where both engines produced something.
@@ -333,10 +445,19 @@ function report(rows, payload, haveOracle) {
       const oursAcc = both.filter((s) => s.ours.accuracy != null);
       const prevAcc = both.filter((s) => s['pptx-preview'].accuracy != null);
       if (oursAcc.length && prevAcc.length) {
+        const mean = (rows, key, engine) =>
+          rows.reduce((a, s) => a + s[engine][key], 0) / rows.length;
         console.log(
-          `  vs oracle  ours ${pct(oursAcc.reduce((a, s) => a + s.ours.accuracy, 0) / oursAcc.length)}` +
-            `  vs  pptx-preview ${pct(prevAcc.reduce((a, s) => a + s['pptx-preview'].accuracy, 0) / prevAcc.length)}` +
-            '   (lower is closer to LibreOffice)',
+          `  vs oracle, % of slide    ours ${pct(mean(oursAcc, 'accuracy', 'ours'))}` +
+            `   vs  pptx-preview ${pct(mean(prevAcc, 'accuracy', 'pptx-preview'))}`,
+        );
+        console.log(
+          `  vs oracle, % of content  ours ${pct(mean(oursAcc, 'ink', 'ours'))}` +
+            `   vs  pptx-preview ${pct(mean(prevAcc, 'ink', 'pptx-preview'))}`,
+        );
+        console.log(
+          '\n  Lower is closer to LibreOffice. Prefer the content figure: a slide is mostly\n' +
+            '  white, so a badly misplaced text block barely moves the canvas figure.',
         );
       }
     }

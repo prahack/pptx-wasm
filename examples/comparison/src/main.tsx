@@ -1,15 +1,17 @@
 /**
  * Side-by-side comparison of pptx renderers.
  *
- * Two jobs. Interactively it puts this viewer next to `pptx-preview` on the same file so
- * differences are visible rather than argued about. Headlessly
- * (`?headless=1&engine=…&fixture=…`) it renders exactly one engine and publishes its
- * timings, which is what `tests/golden/compare.mjs` drives.
+ * Two jobs. Interactively it puts this viewer next to `pptx-preview` on the same file —
+ * a bundled fixture or one you drop in — so differences are visible rather than argued
+ * about. Headlessly (`?headless=1&engine=…&fixture=…`) it renders exactly one engine and
+ * publishes its timings, which is what `tests/golden/compare.mjs` drives.
  *
  * Fairness rules, since a benchmark that flatters its author is worthless:
- *  - both engines get the same file, the same slide and the same pixel dimensions;
- *  - timing starts before the fetch and stops when the engine says it has drawn;
- *  - each engine is measured in its own page load, so neither warms the other's caches.
+ *  - both engines get the same bytes, the same slide and the same pixel dimensions;
+ *  - the clock stops when the engine says it has drawn, not when its promise resolves;
+ *  - in the harness each engine is measured in its own page load, so neither warms the
+ *    other's caches;
+ *  - an engine that fails is reported as failing, not silently dropped.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,13 +23,13 @@ import { init as initPptxPreview } from 'pptx-preview';
 export type EngineId = 'ours' | 'pptx-preview';
 
 export interface Timing {
-  /** Fetching the bytes. Reported separately so it can be excluded from the comparison. */
+  /** Fetching or reading the bytes. Reported separately so it can be excluded. */
   fetchMs: number;
   /** Parsing/opening the deck. */
   openMs: number;
   /** Producing the first visible slide. */
   renderMs: number;
-  /** open + render, which is what a user waits for. */
+  /** open + render, which is what a user actually waits for. */
   totalMs: number;
   slideCount: number;
 }
@@ -40,12 +42,13 @@ declare global {
     /**
      * Runs one more open-and-render in this page and returns its timings.
      *
-     * The harness calls this repeatedly to separate the *cold* cost — which for a
-     * WASM engine includes instantiating the module, and for a JS engine includes
-     * parsing and JIT-warming the bundle — from the *warm* cost of opening a second
-     * deck in a session. Both are real; they answer different questions.
+     * The harness calls this repeatedly for two reasons: to separate the *cold* cost —
+     * which for a WASM engine includes instantiating the module, and for a JS engine
+     * includes parsing and JIT-warming the bundle — from the *warm* cost of opening a
+     * second deck; and to walk every slide, since judging a renderer on slide 1 alone
+     * flatters it (slide 1 is usually the title, the simplest slide in the deck).
      */
-    __cmpRun?: () => Promise<Timing>;
+    __cmpRun?: (slide?: number) => Promise<Timing>;
   }
 }
 
@@ -68,7 +71,7 @@ const FIXTURES = [
   'm5c-effects.pptx',
 ];
 
-async function fetchDeck(name: string): Promise<{ bytes: ArrayBuffer; fetchMs: number }> {
+async function fetchFixture(name: string): Promise<{ bytes: ArrayBuffer; fetchMs: number }> {
   const t = performance.now();
   const res = await fetch(`/fixtures/generated/${name}`);
   if (!res.ok) throw new Error(`could not fetch ${name}: ${res.status}`);
@@ -77,12 +80,7 @@ async function fetchDeck(name: string): Promise<{ bytes: ArrayBuffer; fetchMs: n
 }
 
 /** Renders with this project's viewer. */
-async function renderOurs(
-  host: HTMLDivElement,
-  bytes: ArrayBuffer,
-  slide: number,
-): Promise<Timing> {
-  const { fetchMs } = { fetchMs: 0 };
+async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
   host.replaceChildren();
   const canvas = document.createElement('canvas');
   canvas.style.width = `${W}px`;
@@ -90,13 +88,15 @@ async function renderOurs(
   host.appendChild(canvas);
 
   const t0 = performance.now();
+  // Each engine gets its own copy: a consumer is free to detach the buffer it is given.
   const deck = await Presentation.open(bytes.slice(0));
   const openMs = performance.now() - t0;
 
+  const index = Math.min(Math.max(0, slide), Math.max(0, deck.slideCount - 1));
   const t1 = performance.now();
-  await deck.render(slide, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
-  // Images decode off the render path; wait for them so the comparison is of a finished
-  // frame, not a partial one.
+  await deck.render(index, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
+  // Images decode off the render path; wait for them so this is a finished frame rather
+  // than a partial one.
   if (deck.pendingAssetCount() > 0) {
     await new Promise<void>((resolve) => {
       const stop = deck.onAssetsReady(() => {
@@ -108,22 +108,16 @@ async function renderOurs(
         resolve();
       }, 5000);
     });
-    await deck.render(slide, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
+    await deck.render(index, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
   }
   const renderMs = performance.now() - t1;
 
-  return {
-    fetchMs,
-    openMs,
-    renderMs,
-    totalMs: openMs + renderMs,
-    slideCount: deck.slideCount,
-  };
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: deck.slideCount };
 }
 
 /** Renders with pptx-preview, which draws HTML into a host element. */
 async function renderPptxPreview(
-  host: HTMLDivElement,
+  host: HTMLElement,
   bytes: ArrayBuffer,
   slide: number,
 ): Promise<Timing> {
@@ -139,20 +133,16 @@ async function renderPptxPreview(
   await previewer.load(bytes.slice(0));
   const openMs = performance.now() - t0;
 
+  const count = previewer.slideCount ?? 1;
+  const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
   const t1 = performance.now();
-  previewer.renderSingleSlide(slide);
+  previewer.renderSingleSlide(index);
   // Its render is synchronous, but let the browser lay the resulting DOM out before
   // calling it done — otherwise we would be timing less work than the user waits for.
   await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   const renderMs = performance.now() - t1;
 
-  return {
-    fetchMs: 0,
-    openMs,
-    renderMs,
-    totalMs: openMs + renderMs,
-    slideCount: previewer.slideCount ?? 1,
-  };
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
 }
 
 const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
@@ -160,62 +150,78 @@ const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
   'pptx-preview': { label: 'pptx-preview 1.0.7', run: renderPptxPreview },
 };
 
+// --------------------------------------------------------------------- interactive
+
 function Pane({
   engine,
-  fixture,
+  bytes,
   slide,
-  onTiming,
+  onResult,
 }: {
   engine: EngineId;
-  fixture: string;
+  bytes: ArrayBuffer | null;
   slide: number;
-  onTiming?: (t: Timing) => void;
+  onResult?: (engine: EngineId, timing: Timing | null, error: string | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [timing, setTiming] = useState<Timing | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const el = host.current;
-    if (!el) return;
-    setTiming(null);
+    if (!el || !bytes) return;
+
+    setBusy(true);
     setError(null);
 
-    (async () => {
-      const { bytes, fetchMs } = await fetchDeck(fixture);
-      if (cancelled) return;
-      const result = await ENGINES[engine].run(el, bytes, slide);
-      if (cancelled) return;
-      const withFetch = { ...result, fetchMs };
-      setTiming(withFetch);
-      onTiming?.(withFetch);
-    })().catch((e: unknown) => {
-      if (cancelled) return;
-      const message = e instanceof Error ? e.message : String(e);
-      setError(message);
-      if (headless) window.__cmpError = message;
-    });
+    ENGINES[engine]
+      .run(el, bytes, slide)
+      .then((t) => {
+        if (cancelled) return;
+        setTiming(t);
+        setBusy(false);
+        onResult?.(engine, t, null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // One engine failing must not take the comparison down — that failure is itself
+        // a result, and the most interesting one when testing a real deck.
+        const message = e instanceof Error ? e.message : String(e);
+        el.replaceChildren();
+        setError(message);
+        setTiming(null);
+        setBusy(false);
+        onResult?.(engine, null, message);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [engine, fixture, slide, onTiming]);
+  }, [engine, bytes, slide, onResult]);
 
   return (
     <section style={{ flex: '0 0 auto' }}>
-      {!headless && (
-        <header style={{ marginBottom: 6 }}>
-          <strong>{ENGINES[engine].label}</strong>
-          <div style={{ color: '#666', fontSize: 13, minHeight: 18 }}>
-            {error
-              ? `error: ${error}`
-              : timing
-                ? `open ${timing.openMs.toFixed(1)}ms · render ${timing.renderMs.toFixed(1)}ms · total ${timing.totalMs.toFixed(1)}ms`
-                : 'rendering…'}
-          </div>
-        </header>
-      )}
+      <header style={{ marginBottom: 6 }}>
+        <strong>{ENGINES[engine].label}</strong>
+        <div style={{ color: error ? '#b00020' : '#666', fontSize: 13, minHeight: 34 }}>
+          {error ? (
+            <>could not render: {error}</>
+          ) : busy ? (
+            'rendering…'
+          ) : timing ? (
+            <>
+              open {timing.openMs.toFixed(1)}ms · render {timing.renderMs.toFixed(1)}ms ·{' '}
+              <strong>total {timing.totalMs.toFixed(1)}ms</strong>
+              <br />
+              {timing.slideCount} slide{timing.slideCount === 1 ? '' : 's'}
+            </>
+          ) : (
+            'waiting for a file'
+          )}
+        </div>
+      </header>
       <div
         ref={host}
         data-engine={engine}
@@ -223,14 +229,229 @@ function Pane({
           width: W,
           height: H,
           background: '#fff',
-          border: headless ? 'none' : '1px solid #ddd',
+          border: '1px solid #ddd',
           overflow: 'hidden',
           position: 'relative',
+          display: 'grid',
+          placeItems: 'center',
+          color: '#bbb',
         }}
-      />
+      >
+        {!bytes && 'no file'}
+      </div>
     </section>
   );
 }
+
+interface Source {
+  bytes: ArrayBuffer;
+  label: string;
+  /** True when the user supplied it, so we can say so in the UI. */
+  custom: boolean;
+}
+
+function App() {
+  const [source, setSource] = useState<Source | null>(null);
+  const [slide, setSlide] = useState(0);
+  const [fixture, setFixture] = useState(fixtureParam);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [results, setResults] = useState<
+    Partial<Record<EngineId, { timing: Timing | null; error: string | null }>>
+  >({});
+
+  const onResult = useCallback((engine: EngineId, timing: Timing | null, error: string | null) => {
+    setResults((prev) => ({ ...prev, [engine]: { timing, error } }));
+  }, []);
+
+  const loadFixture = useCallback(async (name: string) => {
+    setLoadError(null);
+    try {
+      const { bytes } = await fetchFixture(name);
+      setSource({ bytes, label: name, custom: false });
+      setSlide(0);
+      setResults({});
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  const loadFile = useCallback(async (file: File) => {
+    setLoadError(null);
+    if (!file.name.toLowerCase().endsWith('.pptx')) {
+      setLoadError(`${file.name} is not a .pptx file`);
+      return;
+    }
+    try {
+      const bytes = await file.arrayBuffer();
+      setSource({ bytes, label: file.name, custom: true });
+      setSlide(0);
+      setResults({});
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  // Start on a fixture so the page is not empty.
+  useEffect(() => {
+    void loadFixture(fixtureParam);
+  }, [loadFixture]);
+
+  // Slide count can differ between engines — that disagreement is itself a finding, so
+  // navigation is bounded by the larger of the two and each pane clamps its own.
+  const counts = (['ours', 'pptx-preview'] as EngineId[])
+    .map((e) => results[e]?.timing?.slideCount)
+    .filter((n): n is number => typeof n === 'number');
+  const maxSlides = counts.length > 0 ? Math.max(...counts) : 1;
+  const disagree = counts.length === 2 && counts[0] !== counts[1];
+
+  const ours = results.ours?.timing;
+  const other = results['pptx-preview']?.timing;
+  const speedup = ours && other ? other.totalMs / Math.max(ours.totalMs, 0.001) : null;
+
+  return (
+    <main
+      style={{ font: '14px system-ui, sans-serif', padding: 20 }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) void loadFile(file);
+      }}
+    >
+      <h1 style={{ fontSize: 19, marginTop: 0 }}>pptx renderer comparison</h1>
+      <p style={{ color: '#555', maxWidth: 780, marginTop: 0 }}>
+        Same bytes, same slide, same pixel size, rendered by both engines. Timings here are
+        indicative — the two share a page and a warm cache. For measured numbers run{' '}
+        <code>npm run compare</code>, which loads each engine in its own page and scores
+        accuracy against LibreOffice.
+      </p>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 14,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginBottom: 14,
+          padding: 12,
+          border: dragging ? '2px dashed #4472C4' : '1px solid #e3e3e3',
+          borderRadius: 6,
+          background: dragging ? '#f2f6fd' : '#fafafa',
+        }}
+      >
+        <label>
+          <strong>Your deck:</strong>{' '}
+          <input
+            type="file"
+            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void loadFile(file);
+            }}
+          />
+        </label>
+        <span style={{ color: '#888' }}>or drop one anywhere on this page</span>
+
+        <span style={{ borderLeft: '1px solid #ddd', height: 20 }} />
+
+        <label>
+          Fixture{' '}
+          <select
+            value={fixture}
+            onChange={(e) => {
+              setFixture(e.target.value);
+              void loadFixture(e.target.value);
+            }}
+          >
+            {FIXTURES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {loadError && (
+        <p role="alert" style={{ color: '#b00020' }}>
+          {loadError}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+        <button onClick={() => setSlide((s) => Math.max(0, s - 1))} disabled={slide === 0}>
+          ‹ Previous
+        </button>
+        <span style={{ minWidth: 110, textAlign: 'center' }}>
+          Slide {slide + 1} of {maxSlides}
+        </span>
+        <button
+          onClick={() => setSlide((s) => Math.min(maxSlides - 1, s + 1))}
+          disabled={slide >= maxSlides - 1}
+        >
+          Next ›
+        </button>
+
+        <span style={{ color: '#666' }}>
+          {source ? (
+            <>
+              {source.custom ? '📄 ' : ''}
+              <code>{source.label}</code>
+            </>
+          ) : (
+            'loading…'
+          )}
+        </span>
+
+        {speedup && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              padding: '4px 10px',
+              borderRadius: 4,
+              background: speedup >= 1 ? '#e8f5e9' : '#fdecea',
+              color: speedup >= 1 ? '#1b5e20' : '#b00020',
+            }}
+          >
+            {speedup >= 1
+              ? `pptx-viewer is ${speedup.toFixed(1)}× faster on this slide`
+              : `pptx-preview is ${(1 / speedup).toFixed(1)}× faster on this slide`}
+          </span>
+        )}
+      </div>
+
+      {disagree && (
+        <p style={{ color: '#8a6d00', background: '#fff8e1', padding: '8px 12px', borderRadius: 4 }}>
+          The engines disagree about how many slides this deck has ({counts.join(' vs ')}).
+          That is worth investigating — one of them is dropping or inventing a slide.
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <Pane engine="ours" bytes={source?.bytes ?? null} slide={slide} onResult={onResult} />
+        <Pane
+          engine="pptx-preview"
+          bytes={source?.bytes ?? null}
+          slide={slide}
+          onResult={onResult}
+        />
+      </div>
+
+      <p style={{ color: '#777', marginTop: 20, maxWidth: 780 }}>
+        Nothing is uploaded. Both engines run entirely in this page, so you can compare a
+        confidential deck without it leaving your machine.
+      </p>
+    </main>
+  );
+}
+
+// --------------------------------------------------------------------- headless
 
 function Headless() {
   const host = useRef<HTMLDivElement>(null);
@@ -239,9 +460,9 @@ function Headless() {
     const el = host.current;
     if (!el) return;
 
-    const runOnce = async (): Promise<Timing> => {
-      const { bytes, fetchMs } = await fetchDeck(fixtureParam);
-      const result = await ENGINES[engineParam].run(el, bytes, slideParam);
+    const runOnce = async (slide = slideParam): Promise<Timing> => {
+      const { bytes, fetchMs } = await fetchFixture(fixtureParam);
+      const result = await ENGINES[engineParam].run(el, bytes, slide);
       return { ...result, fetchMs };
     };
 
@@ -271,58 +492,6 @@ function Headless() {
         style={{ width: W, height: H, background: '#fff', overflow: 'hidden', position: 'relative' }}
       />
     </div>
-  );
-}
-
-function App() {
-  const [fixture, setFixture] = useState(fixtureParam);
-  const [slide, setSlide] = useState(slideParam);
-  const [nonce, setNonce] = useState(0);
-
-  return (
-    <main style={{ font: '14px system-ui, sans-serif', padding: 20 }}>
-      <h1 style={{ fontSize: 19, marginTop: 0 }}>pptx renderer comparison</h1>
-      <p style={{ color: '#555', maxWidth: 760, marginTop: 0 }}>
-        Same file, same slide, same pixel size, rendered by both engines. Timings here are
-        indicative — they share a page and a warm cache. For the measured numbers run{' '}
-        <code>npm run compare</code>, which loads each engine in its own page.
-      </p>
-
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-        <label>
-          Fixture{' '}
-          <select
-            value={fixture}
-            onChange={(e) => {
-              setFixture(e.target.value);
-              setSlide(0);
-            }}
-          >
-            {FIXTURES.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Slide{' '}
-          <input
-            type="number"
-            min={0}
-            value={slide}
-            style={{ width: 60 }}
-            onChange={(e) => setSlide(Math.max(0, Number.parseInt(e.target.value, 10) || 0))}
-          />
-        </label>
-        <button onClick={() => setNonce((n) => n + 1)}>Re-render</button>
-      </div>
-
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <Pane key={`ours-${nonce}`} engine="ours" fixture={fixture} slide={slide} />
-        <Pane key={`prev-${nonce}`} engine="pptx-preview" fixture={fixture} slide={slide} />
-      </div>
-    </main>
   );
 }
 
