@@ -60,6 +60,20 @@ const slideParam = Number.parseInt(params.get('slide') ?? '0', 10) || 0;
 const W = Number.parseInt(params.get('w') ?? '960', 10);
 const H = Number.parseInt(params.get('h') ?? '540', 10);
 
+/**
+ * Device pixel ratio to render at.
+ *
+ * Interactively this must be the display's real ratio, or a canvas renderer looks soft
+ * against a DOM one on any Retina screen — the DOM engine gets native-resolution text for
+ * free while the canvas is drawn at CSS resolution and upscaled. That is a difference in
+ * the harness, not in the renderers, and it is exactly the kind of unfairness that makes
+ * a benchmark worthless.
+ *
+ * Headlessly it is pinned to 1, because those screenshots are diffed against a 960x540
+ * LibreOffice render and have to come out the same size.
+ */
+const DPR = headless ? 1 : (globalThis.devicePixelRatio || 1);
+
 const FIXTURES = [
   'm0-blank.pptx',
   'm1-basic.pptx',
@@ -94,7 +108,7 @@ async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number):
 
   const index = Math.min(Math.max(0, slide), Math.max(0, deck.slideCount - 1));
   const t1 = performance.now();
-  await deck.render(index, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
+  await deck.render(index, canvas, { width: W, height: H, dpr: DPR, fit: 'contain' });
   // Images decode off the render path; wait for them so this is a finished frame rather
   // than a partial one.
   if (deck.pendingAssetCount() > 0) {
@@ -108,7 +122,7 @@ async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number):
         resolve();
       }, 5000);
     });
-    await deck.render(index, canvas, { width: W, height: H, dpr: 1, fit: 'contain' });
+    await deck.render(index, canvas, { width: W, height: H, dpr: DPR, fit: 'contain' });
   }
   const renderMs = performance.now() - t1;
 

@@ -19,7 +19,8 @@
     "test": "npm run test:rust && npm run test:golden && npm run test:browsers",
     "bench": "node tests/golden/bench.mjs",
     "test:browsers": "node tests/golden/browsers.mjs",
-    "compare": "node tests/golden/compare.mjs"
+    "compare": "node tests/golden/compare.mjs",
+    "build:pkg": "npm run wasm && npm run build --workspace packages/viewer"
   },
   "devDependencies": {
     "pixelmatch": "^6.0.0",

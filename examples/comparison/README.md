@@ -3,9 +3,16 @@
 Puts this viewer next to other browser-side pptx renderers on the same file.
 
 ```sh
-npm install
+npm run build:pkg    # from the repo root — builds the WASM *and* the package
+cd examples/comparison && npm install
 npm run dev          # http://localhost:5179 — side by side, pick a fixture
 ```
+
+`npm run build:pkg` matters. This app imports `pptx-viewer`, which resolves to
+`packages/viewer/dist` — a copy made by the package build, not the WASM build. Running
+only `npm run wasm` after a Rust change leaves it stale and the app silently runs the
+previous build. The dev server refuses to start in that state rather than let you debug a
+fix that is not loaded.
 
 For measured numbers rather than an eyeball, run the harness from the repo root:
 

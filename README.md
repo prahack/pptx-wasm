@@ -63,6 +63,7 @@ outright, so you can work on the Rust without the whole toolchain installed.
 |---|---|
 | `npm run dev` | build the WASM and serve the dev app on :5178 |
 | `npm run wasm` | build the WASM only |
+| `npm run build:pkg` | build the WASM **and** the package — what the examples consume |
 | `npm run build` | build the publishable package |
 | `cargo test --workspace` | Rust tests — parsing, layout, culling, renderer behaviour |
 | `npm run test:golden` | render every fixture and pixel-diff against LibreOffice |
