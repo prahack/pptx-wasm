@@ -167,6 +167,29 @@ impl Default for Stroke {
     }
 }
 
+/// A drop shadow, in display-list points.
+///
+/// Modelled as renderer *state* rather than as a property of a path because that is what
+/// it is in every backend: Canvas2D has `shadowBlur`/`shadowOffset*` on the context, and a
+/// GPU backend renders the shape to an offscreen target and blurs it. Making it state also
+/// means `Save`/`Restore` scopes it for free.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Shadow {
+    /// Gaussian blur radius.
+    pub blur: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub color: Color,
+}
+
+impl Shadow {
+    /// True when the shadow cannot change any pixel.
+    pub fn is_invisible(&self) -> bool {
+        self.color.is_transparent()
+            || (self.blur <= 0.0 && self.offset_x == 0.0 && self.offset_y == 0.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FillRule {
     #[default]

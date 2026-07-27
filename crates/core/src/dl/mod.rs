@@ -11,7 +11,7 @@ pub mod text;
 
 pub use geom::{Path, PathVerb, Point, Rect, Transform};
 pub use paint::{
-    Color, FillRule, Gradient, GradientStop, ImageId, LineCap, LineJoin, Paint, Stroke,
+    Color, FillRule, Gradient, GradientStop, ImageId, LineCap, LineJoin, Paint, Shadow, Stroke,
 };
 pub use text::{Decorations, FontSpec, FontStyle, FontWeight, TextRun};
 
@@ -30,6 +30,9 @@ pub enum Command {
         path: Path,
         rule: FillRule,
     },
+    /// Sets (or clears) the drop shadow applied to subsequent drawing. Scoped by the
+    /// enclosing `Save`/`Restore`, like a clip.
+    SetShadow(Option<Shadow>),
     FillPath {
         path: Path,
         paint: Paint,

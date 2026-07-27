@@ -65,8 +65,8 @@
     {
       "id": "m5c",
       "fixture": "m5c-effects.pptx",
-      "maxDiffRatio": 0.12,
-      "reason": "Deliberately loose. Gaussian shadow radii, gradient interpolation and alpha compositing are all approximations that LibreOffice makes differently from a browser; matching it closely would mean matching its bugs. Regressions show as structural changes, not as a drifting ratio."
+      "maxDiffRatio": 0.02,
+      "reason": "Gradients, alpha compositing and the outer shadow all render, and this suite now sits near 0.1%. The remaining budget is for the Gaussian blur radius, which LibreOffice and a browser compute differently \u2014 matching it exactly would mean matching its implementation. Note what this tolerance can and cannot catch: an effect vanishing entirely only moves the figure by about half a percent, so the real guard against that is the unit tests in layout::tests, which assert the SetShadow command and its scope directly. Pixel tolerance is the wrong instrument for 'did this feature stop working'."
     }
   ]
 }

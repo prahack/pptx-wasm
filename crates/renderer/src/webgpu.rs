@@ -52,6 +52,10 @@ pub struct Requirements {
     pub stencil_clips: usize,
     /// Gradients needing a shader or lookup texture.
     pub gradients: usize,
+    /// Shadows, each of which needs an offscreen render target plus a separable blur
+    /// pass. By far the most expensive primitive here, which is why it is counted apart
+    /// from everything else.
+    pub offscreen_passes: usize,
     /// Commands this backend could not express. Non-empty means the abstraction has
     /// sprung a leak and something upstream is assuming Canvas2D.
     pub unsupported: Vec<String>,
@@ -68,6 +72,11 @@ impl Requirements {
             match cmd {
                 Command::Save | Command::Restore | Command::Concat(_) => {}
                 Command::ClipRect(_) => r.scissor_clips += 1,
+                Command::SetShadow(shadow) => {
+                    if shadow.is_some() {
+                        r.offscreen_passes += 1;
+                    }
+                }
                 Command::ClipPath { path, .. } => {
                     r.stencil_clips += 1;
                     r.path_segments += path.verbs.len();
@@ -142,7 +151,7 @@ impl Requirements {
     /// A one-line summary for logs and the dev overlay.
     pub fn summary(&self) -> String {
         format!(
-            "{} fills, {} strokes, {} segments, {} glyphs in {} runs, {} textures, {} gradients, clips: {} scissor / {} stencil{}",
+            "{} fills, {} strokes, {} segments, {} glyphs in {} runs, {} textures, {} gradients, {} offscreen passes, clips: {} scissor / {} stencil{}",
             self.fill_paths,
             self.stroke_paths,
             self.path_segments,
@@ -150,6 +159,7 @@ impl Requirements {
             self.text_runs,
             self.textures,
             self.gradients,
+            self.offscreen_passes,
             self.scissor_clips,
             self.stencil_clips,
             if self.unsupported.is_empty() {
@@ -221,6 +231,7 @@ impl Renderer for WebGpuRenderer {
         self.requirements.scissor_clips += r.scissor_clips;
         self.requirements.stencil_clips += r.stencil_clips;
         self.requirements.gradients += r.gradients;
+        self.requirements.offscreen_passes += r.offscreen_passes;
         self.requirements.unsupported.extend(r.unsupported);
         if let Command::DrawText(run) = cmd {
             let key = run.font.to_css();

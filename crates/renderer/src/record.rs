@@ -31,6 +31,7 @@ pub struct Counts {
     pub texts: usize,
     pub images: usize,
     pub clips: usize,
+    pub shadows: usize,
 }
 
 impl RecordingRenderer {
@@ -112,6 +113,20 @@ impl Renderer for RecordingRenderer {
             Command::ClipPath { path, rule } => {
                 self.counts.clips += 1;
                 let s = format!("clipPath {:?} {}", rule, fmt_path(path));
+                self.line(&s);
+            }
+            Command::SetShadow(shadow) => {
+                self.counts.shadows += 1;
+                let s = match shadow {
+                    Some(sh) => format!(
+                        "shadow {} blur={:.2} offset={:.2},{:.2}",
+                        sh.color.to_css(),
+                        sh.blur,
+                        sh.offset_x,
+                        sh.offset_y
+                    ),
+                    None => "shadow none".to_string(),
+                };
                 self.line(&s);
             }
             Command::FillPath { path, paint, rule } => {
@@ -321,7 +336,8 @@ mod tests {
                 strokes: 1,
                 texts: 0,
                 images: 1,
-                clips: 0
+                clips: 0,
+                shadows: 0,
             }
         );
     }

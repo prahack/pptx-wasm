@@ -14,7 +14,7 @@ use web_sys::{CanvasRenderingContext2d, CanvasWindingRule, HtmlImageElement, Pat
 
 use pptx_core::dl::{
     Command, DisplayList, FillRule, Gradient, ImageId, LineCap, LineJoin, Paint, Path, PathVerb,
-    Point, Stroke, TextRun, Transform,
+    Point, Shadow, Stroke, TextRun, Transform,
 };
 
 use crate::{ImageSource, Renderer};
@@ -315,6 +315,30 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
         Ok(())
     }
 
+    /// Applies (or clears) the context's shadow state.
+    ///
+    /// The shadow offset is in *device* space on a 2D context — unlike everything else,
+    /// it is not put through the current transform. So the display list's offset, which
+    /// is in points, has to be scaled by the current transform by hand; otherwise a
+    /// shadow drifts away from its shape at every zoom level but 100%.
+    fn set_shadow(&mut self, shadow: Option<&Shadow>) {
+        match shadow {
+            Some(s) => {
+                let scale = self.current.approx_scale().max(1e-4) as f64;
+                self.ctx.set_shadow_color(&s.color.to_css());
+                self.ctx.set_shadow_blur(s.blur as f64 * scale);
+                self.ctx.set_shadow_offset_x(s.offset_x as f64 * scale);
+                self.ctx.set_shadow_offset_y(s.offset_y as f64 * scale);
+            }
+            None => {
+                self.ctx.set_shadow_color("rgba(0,0,0,0)");
+                self.ctx.set_shadow_blur(0.0);
+                self.ctx.set_shadow_offset_x(0.0);
+                self.ctx.set_shadow_offset_y(0.0);
+            }
+        }
+    }
+
     fn draw_image(
         &self,
         handle: &CanvasImage,
@@ -417,6 +441,7 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
         // Clear in device space, before the root transform goes on.
         self.ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).map_err(Error::from)?;
         self.ctx.set_global_alpha(1.0);
+        self.set_shadow(None);
         if self.pixel_size.0 > 0.0 && self.pixel_size.1 > 0.0 {
             self.ctx
                 .clear_rect(0.0, 0.0, self.pixel_size.0, self.pixel_size.1);
@@ -455,6 +480,7 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
                 let p = self.build_path(path)?;
                 self.ctx.clip_with_path_2d_and_winding(&p, Self::winding(*rule));
             }
+            Command::SetShadow(shadow) => self.set_shadow(shadow.as_ref()),
             Command::FillPath { path, paint, rule } => self.fill(path, paint, *rule)?,
             Command::StrokePath { path, stroke } => self.stroke(path, stroke)?,
             Command::DrawImage {

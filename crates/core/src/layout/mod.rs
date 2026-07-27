@@ -301,7 +301,16 @@ fn emit_geometry(
 ) {
     let fill = ctx.resolver.fill(shape, ancestors);
     let line = ctx.resolver.line(shape, ancestors);
+    let effects = ctx.resolver.effects(shape, ancestors);
     let paths = geom::evaluate(&shape.geometry, box_rect.w, box_rect.h);
+
+    // The shadow is scoped to the shape's own geometry: text inside the shape carries its
+    // own effects and must not inherit the box's shadow.
+    let shadow = resolve_shadow(&effects, ctx);
+    if shadow.is_some() {
+        dl.push(Command::Save);
+        dl.push(Command::SetShadow(shadow));
+    }
 
     // Geometry is generated at the origin; move it to the shape's position.
     let offset = Transform::translate(box_rect.x, box_rect.y);
@@ -326,6 +335,44 @@ fn emit_geometry(
             }
         }
     }
+
+    if shadow.is_some() {
+        dl.push(Command::Restore);
+    }
+}
+
+/// Converts a shape's resolved effects into a display-list shadow.
+///
+/// Outer shadow and glow collapse to the same primitive: a glow *is* an outer shadow with
+/// no offset. Soft edges cannot be expressed this way — they need the shape's own alpha
+/// feathered inward, which is a mask operation the display list has no command for — so
+/// they are logged and dropped rather than silently approximated by something that looks
+/// nothing like them.
+fn resolve_shadow(effects: &crate::model::Effects, ctx: &Ctx<'_>) -> Option<crate::dl::Shadow> {
+    if effects.soft_edge.is_some() {
+        log::debug!("soft edges are not rendered; the shape is drawn with hard edges");
+    }
+    if let Some(s) = &effects.outer_shadow {
+        let distance = emu::to_pt(s.distance);
+        let angle = s.direction_deg.to_radians();
+        let shadow = crate::dl::Shadow {
+            blur: emu::to_pt(s.blur).max(0.0),
+            offset_x: distance * angle.cos(),
+            offset_y: distance * angle.sin(),
+            color: ctx.resolver.color(&s.color),
+        };
+        return (!shadow.is_invisible()).then_some(shadow);
+    }
+    if let Some(g) = &effects.glow {
+        let shadow = crate::dl::Shadow {
+            blur: emu::to_pt(g.radius).max(0.0),
+            offset_x: 0.0,
+            offset_y: 0.0,
+            color: ctx.resolver.color(&g.color),
+        };
+        return (!shadow.is_invisible()).then_some(shadow);
+    }
+    None
 }
 
 fn emit_picture(
@@ -839,6 +886,135 @@ mod tests {
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].0, Rect::new(0.0, 0.0, 960.0, 540.0));
         assert_eq!(f[0].1, Paint::Solid(crate::dl::Color::rgb(0x12, 0x34, 0x56)));
+    }
+
+    const SHADOW_SLIDE: &str = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+        <p:sp>
+          <p:nvSpPr><p:cNvPr id="2" name="Shadowed"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="914400" y="914400"/><a:ext cx="1828800" cy="914400"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:solidFill><a:srgbClr val="70AD47"/></a:solidFill>
+            <a:effectLst>
+              <a:outerShdw blurRad="76200" dist="50800" dir="2700000">
+                <a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr>
+              </a:outerShdw>
+            </a:effectLst>
+          </p:spPr>
+        </p:sp>
+      </p:spTree></p:cSld></p:sld>"#;
+
+    fn shadows(dl: &DisplayList) -> Vec<Option<crate::dl::Shadow>> {
+        dl.commands
+            .iter()
+            .filter_map(|c| match c {
+                Command::SetShadow(s) => Some(*s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_outer_shadow_becomes_a_scoped_shadow_command() {
+        let pres = deck_with_slide(SHADOW_SLIDE);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        let found = shadows(&dl);
+        assert_eq!(found.len(), 1);
+        let shadow = found[0].expect("a shadow");
+        // 76200 EMU = 6pt blur; 50800 EMU = 4pt at 45 degrees.
+        assert!((shadow.blur - 6.0).abs() < 0.01, "blur={}", shadow.blur);
+        assert!((shadow.offset_x - 4.0 * 0.7071).abs() < 0.05, "dx={}", shadow.offset_x);
+        assert!((shadow.offset_y - 4.0 * 0.7071).abs() < 0.05, "dy={}", shadow.offset_y);
+        assert_eq!(shadow.color.a, 102, "40% alpha");
+        assert!(dl.is_balanced(), "the shadow scope must be balanced");
+    }
+
+    #[test]
+    fn a_shape_without_effects_emits_no_shadow_command() {
+        let pres = deck_with_slide(RECT_SLIDE);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        assert!(shadows(&dl).is_empty());
+    }
+
+    #[test]
+    fn a_fully_transparent_shadow_is_dropped_rather_than_scoped() {
+        let slide = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+            <p:sp>
+              <p:nvSpPr><p:cNvPr id="2" name="S"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+              <p:spPr>
+                <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                <a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>
+                <a:effectLst>
+                  <a:outerShdw blurRad="76200" dist="50800" dir="2700000">
+                    <a:srgbClr val="000000"><a:alpha val="0"/></a:srgbClr>
+                  </a:outerShdw>
+                </a:effectLst>
+              </p:spPr>
+            </p:sp>
+          </p:spTree></p:cSld></p:sld>"#;
+        let pres = deck_with_slide(slide);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        assert!(shadows(&dl).is_empty(), "an invisible shadow costs a renderer state change for nothing");
+    }
+
+    #[test]
+    fn a_glow_becomes_an_unoffset_shadow() {
+        let slide = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+            <p:sp>
+              <p:nvSpPr><p:cNvPr id="2" name="Glowing"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+              <p:spPr>
+                <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                <a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>
+                <a:effectLst>
+                  <a:glow rad="127000"><a:srgbClr val="00B0F0"/></a:glow>
+                </a:effectLst>
+              </p:spPr>
+            </p:sp>
+          </p:spTree></p:cSld></p:sld>"#;
+        let pres = deck_with_slide(slide);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        let shadow = shadows(&dl).first().copied().flatten().expect("a glow");
+        assert_eq!(shadow.offset_x, 0.0);
+        assert_eq!(shadow.offset_y, 0.0);
+        assert!((shadow.blur - 10.0).abs() < 0.01, "127000 EMU is 10pt");
+        assert_eq!(shadow.color, crate::dl::Color::rgb(0x00, 0xB0, 0xF0));
+    }
+
+    #[test]
+    fn the_shadow_does_not_extend_to_the_shapes_text() {
+        let slide = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+            <p:sp>
+              <p:nvSpPr><p:cNvPr id="2" name="S"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+              <p:spPr>
+                <a:xfrm><a:off x="0" y="0"/><a:ext cx="2743200" cy="914400"/></a:xfrm>
+                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                <a:solidFill><a:srgbClr val="70AD47"/></a:solidFill>
+                <a:effectLst><a:outerShdw blurRad="76200" dist="50800" dir="2700000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst>
+              </p:spPr>
+              <p:txBody><a:bodyPr/><a:p><a:r><a:t>Label</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+          </p:spTree></p:cSld></p:sld>"#;
+        let pres = deck_with_slide(slide);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        // The Restore that closes the shadow scope must come before the text is drawn.
+        let shadow_at = dl
+            .commands
+            .iter()
+            .position(|c| matches!(c, Command::SetShadow(Some(_))))
+            .expect("shadow");
+        let restore_at = dl.commands[shadow_at..]
+            .iter()
+            .position(|c| matches!(c, Command::Restore))
+            .expect("restore")
+            + shadow_at;
+        let text_at = dl
+            .commands
+            .iter()
+            .position(|c| matches!(c, Command::DrawText(_)))
+            .expect("text");
+        assert!(restore_at < text_at, "text must be outside the shadow scope");
     }
 
     #[test]
