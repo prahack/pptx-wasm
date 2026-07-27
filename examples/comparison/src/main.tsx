@@ -33,7 +33,7 @@ import { createRoot } from 'react-dom/client';
 // taking the page down with it. pptxviewjs imports an undeclared `chart.js` and did
 // exactly that, hiding every other engine's result behind its failure.
 
-export type EngineId = 'ours' | 'pptx-preview' | 'pptxviewjs' | 'aiden0z';
+export type EngineId = 'ours' | 'pptx-preview' | 'pptxviewjs' | 'aiden0z' | 'jvmr';
 
 export interface Timing {
   /** Fetching or reading the bytes. Reported separately so it can be excluded. */
@@ -242,11 +242,50 @@ async function renderAiden(host: HTMLElement, bytes: ArrayBuffer, slide: number)
   return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
 }
 
+/**
+ * Renders with @jvmr/pptx-to-html, which converts a deck to an array of HTML strings.
+ *
+ * Its whole API is one call that returns every slide at once, so the deck is fully parsed
+ * during "open" however few slides are wanted. That is a real architectural difference
+ * rather than a slow implementation: on these one-to-three-slide fixtures it costs almost
+ * nothing, and on a 250-slide deck it is the difference between parsing one slide and
+ * parsing all of them. The cache below keeps it from re-parsing on every warm run, which
+ * is the fairest reading — a consumer would hold the returned array too.
+ */
+const jvmrCache = new WeakMap<ArrayBuffer, string[]>();
+
+async function renderJvmr(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
+  host.replaceChildren();
+  const mount = document.createElement('div');
+  mount.style.width = `${W}px`;
+  mount.style.height = `${H}px`;
+  host.appendChild(mount);
+
+  const t0 = performance.now();
+  const { pptxToHtml } = await import('@jvmr/pptx-to-html');
+  let slides = jvmrCache.get(bytes);
+  if (!slides) {
+    slides = await pptxToHtml(bytes.slice(0), { width: W, height: H });
+    jvmrCache.set(bytes, slides);
+  }
+  const openMs = performance.now() - t0;
+
+  const count = slides.length || 1;
+  const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
+  const t1 = performance.now();
+  mount.innerHTML = slides[index] ?? '';
+  flushLayout(mount);
+  const renderMs = performance.now() - t1;
+
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
+}
+
 const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
   ours: { label: 'pptx-viewer (this project)', run: renderOurs },
   'pptx-preview': { label: 'pptx-preview 1.0.7', run: renderPptxPreview },
   pptxviewjs: { label: 'pptxviewjs 1.1.9', run: renderPptxViewJs },
   aiden0z: { label: '@aiden0z/pptx-renderer 1.2.4', run: renderAiden },
+  jvmr: { label: '@jvmr/pptx-to-html 1.1.1', run: renderJvmr },
 };
 
 /** Every engine, in display order. Kept next to ENGINES so the two cannot drift. */

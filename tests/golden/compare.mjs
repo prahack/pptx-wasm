@@ -122,6 +122,12 @@ const ENGINES = [
     self: '@aiden0z/pptx-renderer/dist/aiden0z-pptx-renderer.es.js',
     deps: ['jszip', 'echarts'],
   },
+  {
+    id: 'jvmr',
+    label: '@jvmr/pptx-to-html 1.1.1',
+    self: '@jvmr/pptx-to-html/dist/index.js',
+    deps: ['jszip'],
+  },
 ];
 
 // --------------------------------------------------------------------- payload
