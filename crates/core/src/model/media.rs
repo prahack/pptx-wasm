@@ -148,7 +148,10 @@ mod tests {
         let emf = r.intern("ppt/media/image1.emf", "image/x-emf");
         let png = r.intern("ppt/media/image2.png", "image/png");
         assert!(!r.get(emf).map(|e| e.is_browser_decodable()).unwrap_or(true));
-        assert!(r.get(png).map(|e| e.is_browser_decodable()).unwrap_or(false));
+        assert!(r
+            .get(png)
+            .map(|e| e.is_browser_decodable())
+            .unwrap_or(false));
     }
 
     #[test]
@@ -156,6 +159,9 @@ mod tests {
         let mut f = EmbeddedFont::new("Corporate Sans");
         f.regular = Some("rId1".into());
         f.bold_italic = Some("rId4".into());
-        assert_eq!(f.variants(), vec![("rId1", false, false), ("rId4", true, true)]);
+        assert_eq!(
+            f.variants(),
+            vec![("rId1", false, false), ("rId4", true, true)]
+        );
     }
 }

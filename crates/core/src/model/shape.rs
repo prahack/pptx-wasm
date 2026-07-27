@@ -55,7 +55,10 @@ impl PlaceholderType {
     /// Title-ish placeholders share a slot: a slide's `title` matches a layout's
     /// `ctrTitle` and vice versa, which is how a title-slide layout still binds.
     pub fn is_title(self) -> bool {
-        matches!(self, PlaceholderType::Title | PlaceholderType::CenteredTitle)
+        matches!(
+            self,
+            PlaceholderType::Title | PlaceholderType::CenteredTitle
+        )
     }
 
     /// Which `<p:txStyles>` block on the master supplies this placeholder's defaults.
@@ -415,7 +418,10 @@ mod tests {
     fn title_variants_bind_to_each_other() {
         assert!(ph(PlaceholderType::Title, None).matches(&ph(PlaceholderType::CenteredTitle, None)));
         assert!(PlaceholderType::CenteredTitle.is_title());
-        assert_eq!(PlaceholderType::CenteredTitle.text_style(), MasterTextStyle::Title);
+        assert_eq!(
+            PlaceholderType::CenteredTitle.text_style(),
+            MasterTextStyle::Title
+        );
     }
 
     #[test]
@@ -457,7 +463,10 @@ mod tests {
         let found = tree
             .find_placeholder(&ph(PlaceholderType::Body, Some(2)))
             .expect("should find idx=2");
-        assert_eq!(found.id, 2, "must not fall back to the first body placeholder");
+        assert_eq!(
+            found.id, 2,
+            "must not fall back to the first body placeholder"
+        );
     }
 
     #[test]
@@ -475,7 +484,8 @@ mod tests {
             root_transform: None,
         };
         assert_eq!(
-            tree.find_placeholder(&ph(PlaceholderType::Title, None)).map(|s| s.id),
+            tree.find_placeholder(&ph(PlaceholderType::Title, None))
+                .map(|s| s.id),
             Some(7)
         );
     }

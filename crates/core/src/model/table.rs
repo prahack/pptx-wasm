@@ -177,7 +177,11 @@ mod tests {
     #[test]
     fn spans_come_from_the_originating_cell() {
         let t = merged_table();
-        assert_eq!(t.cell_span(0, 0), Some((0, 0, 2, 1)), "horizontal merge of 2");
+        assert_eq!(
+            t.cell_span(0, 0),
+            Some((0, 0, 2, 1)),
+            "horizontal merge of 2"
+        );
         assert_eq!(t.cell_span(0, 2), Some((2, 0, 1, 2)), "vertical merge of 2");
     }
 
@@ -219,6 +223,9 @@ mod tests {
 
     #[test]
     fn default_cell_margins_are_the_ecma_values() {
-        assert_eq!(TableCell::default().resolved_margins(), (91_440, 45_720, 91_440, 45_720));
+        assert_eq!(
+            TableCell::default().resolved_margins(),
+            (91_440, 45_720, 91_440, 45_720)
+        );
     }
 }

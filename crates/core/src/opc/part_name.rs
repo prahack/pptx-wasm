@@ -105,15 +105,27 @@ mod tests {
 
     #[test]
     fn normalize_strips_leading_slash_and_dot_segments() {
-        assert_eq!(PartName::normalize("/ppt/presentation.xml"), "ppt/presentation.xml");
-        assert_eq!(PartName::normalize("ppt/./slides/slide1.xml"), "ppt/slides/slide1.xml");
-        assert_eq!(PartName::normalize("ppt/slides/../media/i.png"), "ppt/media/i.png");
+        assert_eq!(
+            PartName::normalize("/ppt/presentation.xml"),
+            "ppt/presentation.xml"
+        );
+        assert_eq!(
+            PartName::normalize("ppt/./slides/slide1.xml"),
+            "ppt/slides/slide1.xml"
+        );
+        assert_eq!(
+            PartName::normalize("ppt/slides/../media/i.png"),
+            "ppt/media/i.png"
+        );
         assert_eq!(PartName::normalize(""), "");
     }
 
     #[test]
     fn normalize_decodes_percent_escapes() {
-        assert_eq!(PartName::normalize("ppt/media/my%20image.png"), "ppt/media/my image.png");
+        assert_eq!(
+            PartName::normalize("ppt/media/my%20image.png"),
+            "ppt/media/my image.png"
+        );
         // A stray percent is left alone rather than eating the next character.
         assert_eq!(PartName::normalize("ppt/100%.xml"), "ppt/100%.xml");
     }
@@ -124,7 +136,10 @@ mod tests {
             PartName::rels_path_for("ppt/slides/slide1.xml"),
             "ppt/slides/_rels/slide1.xml.rels"
         );
-        assert_eq!(PartName::rels_path_for("ppt/presentation.xml"), "ppt/_rels/presentation.xml.rels");
+        assert_eq!(
+            PartName::rels_path_for("ppt/presentation.xml"),
+            "ppt/_rels/presentation.xml.rels"
+        );
         assert_eq!(PartName::rels_path_for(""), "_rels/.rels");
     }
 
@@ -144,17 +159,26 @@ mod tests {
             "ppt/media/i.png"
         );
         // Targets declared by the package root.
-        assert_eq!(PartName::resolve_target("", "ppt/presentation.xml"), "ppt/presentation.xml");
+        assert_eq!(
+            PartName::resolve_target("", "ppt/presentation.xml"),
+            "ppt/presentation.xml"
+        );
     }
 
     #[test]
     fn escaping_above_the_package_root_clamps_instead_of_underflowing() {
-        assert_eq!(PartName::resolve_target("a.xml", "../../../etc/passwd"), "etc/passwd");
+        assert_eq!(
+            PartName::resolve_target("a.xml", "../../../etc/passwd"),
+            "etc/passwd"
+        );
     }
 
     #[test]
     fn extension_is_lowercased() {
-        assert_eq!(PartName::extension("ppt/media/i.PNG").as_deref(), Some("png"));
+        assert_eq!(
+            PartName::extension("ppt/media/i.PNG").as_deref(),
+            Some("png")
+        );
         assert_eq!(PartName::extension("ppt/media/noext"), None);
     }
 }

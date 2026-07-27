@@ -22,26 +22,24 @@ impl ContentTypes {
         let mut buf = Vec::new();
         loop {
             match reader.read_event_into(&mut buf) {
-                Ok(Event::Empty(e)) | Ok(Event::Start(e)) => {
-                    match local_name(e.name().as_ref()) {
-                        b"Default" => {
-                            if let (Some(ext), Some(t)) =
-                                (attr(&e, b"Extension"), attr(&e, b"ContentType"))
-                            {
-                                ct.defaults.insert(ext.to_ascii_lowercase(), t);
-                            }
+                Ok(Event::Empty(e)) | Ok(Event::Start(e)) => match local_name(e.name().as_ref()) {
+                    b"Default" => {
+                        if let (Some(ext), Some(t)) =
+                            (attr(&e, b"Extension"), attr(&e, b"ContentType"))
+                        {
+                            ct.defaults.insert(ext.to_ascii_lowercase(), t);
                         }
-                        b"Override" => {
-                            if let (Some(part), Some(t)) =
-                                (attr(&e, b"PartName"), attr(&e, b"ContentType"))
-                            {
-                                ct.overrides
-                                    .insert(PartName::normalize(&part).to_ascii_lowercase(), t);
-                            }
-                        }
-                        _ => {}
                     }
-                }
+                    b"Override" => {
+                        if let (Some(part), Some(t)) =
+                            (attr(&e, b"PartName"), attr(&e, b"ContentType"))
+                        {
+                            ct.overrides
+                                .insert(PartName::normalize(&part).to_ascii_lowercase(), t);
+                        }
+                    }
+                    _ => {}
+                },
                 Ok(Event::Eof) => break,
                 Err(e) => {
                     log::warn!("malformed [Content_Types].xml: {e}");
@@ -148,7 +146,10 @@ mod tests {
     fn overrides_beat_extension_defaults() {
         let ct = ContentTypes::parse(XML);
         assert_eq!(ct.for_part("/ppt/media/logo.bin"), Some("image/jpeg"));
-        assert_eq!(ct.for_part("ppt/other.bin"), Some("application/octet-stream"));
+        assert_eq!(
+            ct.for_part("ppt/other.bin"),
+            Some("application/octet-stream")
+        );
     }
 
     #[test]
@@ -181,6 +182,9 @@ mod tests {
     #[test]
     fn empty_or_broken_input_yields_an_empty_map_not_a_panic() {
         assert_eq!(ContentTypes::parse(b"").for_part("a.xml"), None);
-        assert_eq!(ContentTypes::parse(b"<Types><Default").for_part("a.png"), None);
+        assert_eq!(
+            ContentTypes::parse(b"<Types><Default").for_part("a.png"),
+            None
+        );
     }
 }

@@ -53,8 +53,18 @@ pub fn fallbacks_for(family: &str) -> Vec<String> {
 
 fn is_serif_name(lower: &str) -> bool {
     const SERIF: &[&str] = &[
-        "times", "georgia", "garamond", "book", "cambria", "constantia", "palatino",
-        "serif", "roman", "minion", "caslon", "baskerville",
+        "times",
+        "georgia",
+        "garamond",
+        "book",
+        "cambria",
+        "constantia",
+        "palatino",
+        "serif",
+        "roman",
+        "minion",
+        "caslon",
+        "baskerville",
     ];
     SERIF.iter().any(|s| lower.contains(s)) && !lower.contains("sans")
 }
@@ -83,9 +93,18 @@ mod tests {
 
     #[test]
     fn serif_and_mono_faces_get_the_matching_generic() {
-        assert_eq!(fallbacks_for("Book Antiqua").last().map(String::as_str), Some("serif"));
-        assert_eq!(fallbacks_for("Consolas").last().map(String::as_str), Some("monospace"));
-        assert_eq!(fallbacks_for("Whatever UI").last().map(String::as_str), Some("sans-serif"));
+        assert_eq!(
+            fallbacks_for("Book Antiqua").last().map(String::as_str),
+            Some("serif")
+        );
+        assert_eq!(
+            fallbacks_for("Consolas").last().map(String::as_str),
+            Some("monospace")
+        );
+        assert_eq!(
+            fallbacks_for("Whatever UI").last().map(String::as_str),
+            Some("sans-serif")
+        );
     }
 
     #[test]

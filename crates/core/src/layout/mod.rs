@@ -138,7 +138,10 @@ fn emit_background(ctx: &mut Ctx<'_>, dl: &mut DisplayList) {
 }
 
 /// Substitutes `phClr` in a background fill style with the colour the `<p:bgRef>` named.
-fn substitute(fill: crate::model::fill::Fill, with: &crate::model::color::ColorRef) -> crate::model::fill::Fill {
+fn substitute(
+    fill: crate::model::fill::Fill,
+    with: &crate::model::color::ColorRef,
+) -> crate::model::fill::Fill {
     use crate::model::color::ColorSpec;
     use crate::model::fill::Fill;
     let swap = |c: &crate::model::color::ColorRef| {
@@ -187,10 +190,8 @@ fn tree_transform(tree: &ShapeTree) -> Transform {
 
 fn group_transform(g: &crate::model::geometry::GroupTransform) -> Transform {
     let (sx, sy) = g.child_scale();
-    let child_off = Transform::translate(
-        -emu::to_pt(g.child_offset_x),
-        -emu::to_pt(g.child_offset_y),
-    );
+    let child_off =
+        Transform::translate(-emu::to_pt(g.child_offset_x), -emu::to_pt(g.child_offset_y));
     let scale = Transform::scale(sx, sy);
     let place = Transform::translate(emu::to_pt(g.xfrm.offset_x), emu::to_pt(g.xfrm.offset_y));
     let mut t = child_off.then(&scale).then(&place);
@@ -331,7 +332,10 @@ fn emit_geometry(
         }
         if ep.stroke {
             if let Some(s) = &stroke {
-                dl.push(Command::StrokePath { path, stroke: s.clone() });
+                dl.push(Command::StrokePath {
+                    path,
+                    stroke: s.clone(),
+                });
             }
         }
     }
@@ -387,7 +391,10 @@ fn emit_picture(
         return;
     };
     let Some(id) = ctx.pres.intern_image(part, rid) else {
-        log::debug!("picture {} references {rid}, which does not resolve", shape.name);
+        log::debug!(
+            "picture {} references {rid}, which does not resolve",
+            shape.name
+        );
         return;
     };
     let [l, t, r, b] = pic.src_rect;
@@ -505,12 +512,7 @@ fn emit_text(
 
     // Custom geometry can narrow where text goes; presets use the whole box.
     let inner = geom::text_rect(&shape.geometry, box_rect.w, box_rect.h);
-    let text_box = Rect::new(
-        box_rect.x + inner.x,
-        box_rect.y + inner.y,
-        inner.w,
-        inner.h,
-    );
+    let text_box = Rect::new(box_rect.x + inner.x, box_rect.y + inner.y, inner.w, inner.h);
     let content = text::content_rect(text_box, &body.body);
 
     // Text is clipped to its shape only when it would otherwise escape; PowerPoint lets
@@ -518,7 +520,11 @@ fn emit_text(
     let mut commands = Vec::new();
     let result = text::layout(&styled, &body.body, content, ctx.measure, &mut commands);
     if result.overflowed {
-        log::trace!("text overflows {} by {:.1}pt", shape.name, result.height - content.h);
+        log::trace!(
+            "text overflows {} by {:.1}pt",
+            shape.name,
+            result.height - content.h
+        );
     }
     dl.commands.extend(commands);
 }
@@ -552,9 +558,13 @@ fn build_paragraphs(
                     if raw.is_empty() {
                         continue;
                     }
-                    let resolved = ctx.resolver.run_props(other.props(), &props, shape, ancestors);
+                    let resolved = ctx
+                        .resolver
+                        .run_props(other.props(), &props, shape, ancestors);
                     let (font, paint, decorations, letter_spacing) = run_style(ctx, &resolved);
-                    let caps = resolved.caps.unwrap_or(crate::model::text::Capitalization::None);
+                    let caps = resolved
+                        .caps
+                        .unwrap_or(crate::model::text::Capitalization::None);
                     fragments.push(StyledFragment {
                         text: text::apply_caps(raw, caps),
                         font,
@@ -796,8 +806,9 @@ mod tests {
             .collect();
         assert_eq!(concats.len(), 1);
         // 45 degrees: a and d are cos(45), b is sin(45).
-        assert!((concats[0].a - 0.7071).abs() < 0.001, "{:?}", concats[0]);
-        assert!((concats[0].b - 0.7071).abs() < 0.001);
+        let root_half = std::f32::consts::FRAC_1_SQRT_2;
+        assert!((concats[0].a - root_half).abs() < 0.001, "{:?}", concats[0]);
+        assert!((concats[0].b - root_half).abs() < 0.001);
         // The unrotated geometry is still emitted at its authored position.
         assert_eq!(fills(&dl)[0].0, Rect::new(0.0, 0.0, 72.0, 72.0));
     }
@@ -885,7 +896,10 @@ mod tests {
         let f = fills(&dl);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].0, Rect::new(0.0, 0.0, 960.0, 540.0));
-        assert_eq!(f[0].1, Paint::Solid(crate::dl::Color::rgb(0x12, 0x34, 0x56)));
+        assert_eq!(
+            f[0].1,
+            Paint::Solid(crate::dl::Color::rgb(0x12, 0x34, 0x56))
+        );
     }
 
     const SHADOW_SLIDE: &str = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
@@ -922,9 +936,18 @@ mod tests {
         assert_eq!(found.len(), 1);
         let shadow = found[0].expect("a shadow");
         // 76200 EMU = 6pt blur; 50800 EMU = 4pt at 45 degrees.
+        let diagonal = 4.0 * std::f32::consts::FRAC_1_SQRT_2;
         assert!((shadow.blur - 6.0).abs() < 0.01, "blur={}", shadow.blur);
-        assert!((shadow.offset_x - 4.0 * 0.7071).abs() < 0.05, "dx={}", shadow.offset_x);
-        assert!((shadow.offset_y - 4.0 * 0.7071).abs() < 0.05, "dy={}", shadow.offset_y);
+        assert!(
+            (shadow.offset_x - diagonal).abs() < 0.05,
+            "dx={}",
+            shadow.offset_x
+        );
+        assert!(
+            (shadow.offset_y - diagonal).abs() < 0.05,
+            "dy={}",
+            shadow.offset_y
+        );
         assert_eq!(shadow.color.a, 102, "40% alpha");
         assert!(dl.is_balanced(), "the shadow scope must be balanced");
     }
@@ -955,7 +978,10 @@ mod tests {
           </p:spTree></p:cSld></p:sld>"#;
         let pres = deck_with_slide(slide);
         let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
-        assert!(shadows(&dl).is_empty(), "an invisible shadow costs a renderer state change for nothing");
+        assert!(
+            shadows(&dl).is_empty(),
+            "an invisible shadow costs a renderer state change for nothing"
+        );
     }
 
     #[test]
@@ -1014,7 +1040,10 @@ mod tests {
             .iter()
             .position(|c| matches!(c, Command::DrawText(_)))
             .expect("text");
-        assert!(restore_at < text_at, "text must be outside the shadow scope");
+        assert!(
+            restore_at < text_at,
+            "text must be outside the shadow scope"
+        );
     }
 
     #[test]
@@ -1029,8 +1058,10 @@ mod tests {
     fn the_view_transform_is_what_applies_zoom_not_the_layout() {
         let pres = deck_with_slide(RECT_SLIDE);
         let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
-        let small = view_for(480.0, 270.0, 1.0, Fit::Contain).transform_for(dl.width_pt, dl.height_pt);
-        let large = view_for(1920.0, 1080.0, 1.0, Fit::Contain).transform_for(dl.width_pt, dl.height_pt);
+        let small =
+            view_for(480.0, 270.0, 1.0, Fit::Contain).transform_for(dl.width_pt, dl.height_pt);
+        let large =
+            view_for(1920.0, 1080.0, 1.0, Fit::Contain).transform_for(dl.width_pt, dl.height_pt);
         assert!((small.a - 0.5).abs() < 1e-6);
         assert!((large.a - 2.0).abs() < 1e-6);
         // The display list itself is unchanged by either.

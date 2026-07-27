@@ -125,7 +125,11 @@ fn linear_endpoints(angle_deg: f32, bounds: Rect) -> (Point, Point) {
 
 fn blend(fg: Color, bg: Color, t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
-    let mix = |a: u8, b: u8| ((a as f32 * t) + (b as f32 * (1.0 - t))).round().clamp(0.0, 255.0) as u8;
+    let mix = |a: u8, b: u8| {
+        ((a as f32 * t) + (b as f32 * (1.0 - t)))
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
     Color {
         r: mix(fg.r, bg.r),
         g: mix(fg.g, bg.g),
@@ -222,7 +226,10 @@ mod tests {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
             let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
             w.start_file("[Content_Types].xml", opts).expect("s");
-            w.write_all(br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#).expect("w");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("w");
             w.finish().expect("f");
         }
         let pkg = crate::opc::Package::open(buf).expect("open");
@@ -270,7 +277,10 @@ mod tests {
             spec: crate::model::color::ColorSpec::Srgb(Color::rgb(255, 0, 0)),
             mods: vec![crate::model::color::ColorMod::Alpha(0.0)],
         };
-        assert_eq!(fill_to_paint(&Fill::Solid(clear), BOX, &r, &e.pres, "p"), None);
+        assert_eq!(
+            fill_to_paint(&Fill::Solid(clear), BOX, &r, &e.pres, "p"),
+            None
+        );
     }
 
     #[test]
@@ -440,6 +450,9 @@ mod tests {
             embed_id: Some("rId99".into()),
             ..Default::default()
         });
-        assert_eq!(fill_to_paint(&f, BOX, &r, &e.pres, "ppt/slides/slide1.xml"), None);
+        assert_eq!(
+            fill_to_paint(&f, BOX, &r, &e.pres, "ppt/slides/slide1.xml"),
+            None
+        );
     }
 }

@@ -17,7 +17,9 @@ use crate::model::text::TextBody;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlotKind {
     /// Vertical bars. `horizontal` makes it a bar-of-rows chart (`<c:barDir val="bar"/>`).
-    Bar { horizontal: bool },
+    Bar {
+        horizontal: bool,
+    },
     Line,
     Pie,
     /// A pie with a hole; `hole_percent` is 0..1 of the radius.
@@ -309,7 +311,9 @@ impl Chart {
 
     /// Every series in draw order, paired with its plot.
     pub fn series(&self) -> impl Iterator<Item = (&Plot, &Series)> {
-        self.plots.iter().flat_map(|p| p.series.iter().map(move |s| (p, s)))
+        self.plots
+            .iter()
+            .flat_map(|p| p.series.iter().map(move |s| (p, s)))
     }
 
     /// The value range a plot's axis has to span.
@@ -321,7 +325,12 @@ impl Chart {
             return (0.0, 1.0);
         }
         if plot.grouping.is_stacked() {
-            let points = plot.series.iter().map(|s| s.values.len()).max().unwrap_or(0);
+            let points = plot
+                .series
+                .iter()
+                .map(|s| s.values.len())
+                .max()
+                .unwrap_or(0);
             let (mut lo, mut hi) = (0.0f64, 0.0f64);
             for i in 0..points {
                 let (mut pos, mut neg) = (0.0f64, 0.0f64);
@@ -458,7 +467,6 @@ fn group_thousands(s: &str) -> String {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,7 +537,10 @@ mod tests {
             }],
             ..Default::default()
         };
-        assert_eq!(chart.value_range(chart.plots.first().expect("plot")), (0.0, 1.0));
+        assert_eq!(
+            chart.value_range(chart.plots.first().expect("plot")),
+            (0.0, 1.0)
+        );
     }
 
     #[test]
@@ -613,8 +624,8 @@ mod tests {
     fn an_unanchored_scale_tracks_the_data_instead_of_reaching_to_zero() {
         // A line chart of 12.4..14.6 must not be squashed against the top of a 0..15 axis.
         let (lo, hi, _) = nice_scale(12.4, 14.6, 5, false);
-        assert!(lo >= 12.0 && lo <= 12.4, "lo={lo}");
-        assert!(hi >= 14.6 && hi <= 15.0, "hi={hi}");
+        assert!((12.0..=12.4).contains(&lo), "lo={lo}");
+        assert!((14.6..=15.0).contains(&hi), "hi={hi}");
     }
 
     #[test]

@@ -170,10 +170,7 @@ impl CanvasTextMeasure {
                         // Control characters have no advance of their own; a tab is
                         // resolved by layout against the paragraph's tab stops.
                         if (0x20..=0x7E).contains(&b) {
-                            t.advances
-                                .get((b - 0x20) as usize)
-                                .copied()
-                                .unwrap_or(0.0)
+                            t.advances.get((b - 0x20) as usize).copied().unwrap_or(0.0)
                         } else {
                             0.0
                         }
@@ -253,9 +250,7 @@ impl TextMeasure for CanvasTextMeasure {
         bare.fallbacks.clear();
         let without = self.measure_raw(PROBE, &bare);
         let present = (with - without).abs() > 0.5;
-        self.missing
-            .borrow_mut()
-            .insert(family.to_owned(), present);
+        self.missing.borrow_mut().insert(family.to_owned(), present);
         present
     }
 }

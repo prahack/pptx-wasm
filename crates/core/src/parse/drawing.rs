@@ -9,8 +9,8 @@ use crate::dl::Color;
 use crate::emu::Emu;
 use crate::model::color::{preset_color, ColorMod, ColorRef, ColorSpec, SchemeColor};
 use crate::model::fill::{
-    ArrowEnd, ArrowType, BlipFill, BlipMode, DashStyle, Effects, Fill, GradientFill, GradientKind,
-    GradientStopSpec, Glow, Line, LineCapStyle, LineJoinStyle, OuterShadow, PatternFill,
+    ArrowEnd, ArrowType, BlipFill, BlipMode, DashStyle, Effects, Fill, Glow, GradientFill,
+    GradientKind, GradientStopSpec, Line, LineCapStyle, LineJoinStyle, OuterShadow, PatternFill,
 };
 use crate::model::geometry::{
     CustomGeometry, Expr, GeomCommand, GeomPath, Geometry, GroupTransform, Guide, PathFillMode,
@@ -46,7 +46,10 @@ where
                 }
                 Ok(Event::Eof) => break,
                 Err(e) => {
-                    log::debug!("xml error inside <{}>: {e}", String::from_utf8_lossy(parent));
+                    log::debug!(
+                        "xml error inside <{}>: {e}",
+                        String::from_utf8_lossy(parent)
+                    );
                     break;
                 }
                 _ => {
@@ -67,7 +70,11 @@ where
 // ---------------------------------------------------------------- colours
 
 /// Parses a colour element (`<a:srgbClr>` and friends) including its modifier children.
-pub fn parse_color_element(r: &mut Reader<'_>, e: &BytesStart<'_>, empty: bool) -> Option<ColorRef> {
+pub fn parse_color_element(
+    r: &mut Reader<'_>,
+    e: &BytesStart<'_>,
+    empty: bool,
+) -> Option<ColorRef> {
     let name = local_name(e.name().as_ref()).to_vec();
     let spec = match name.as_slice() {
         b"srgbClr" => ColorSpec::Srgb(
@@ -435,7 +442,10 @@ fn parse_arrow(e: &BytesStart<'_>) -> ArrowEnd {
         _ => 3.0,
     };
     ArrowEnd {
-        kind: attr(e, b"type").as_deref().map(ArrowType::parse).unwrap_or(ArrowType::None),
+        kind: attr(e, b"type")
+            .as_deref()
+            .map(ArrowType::parse)
+            .unwrap_or(ArrowType::None),
         width: size(attr(e, b"w")),
         length: size(attr(e, b"len")),
     }
@@ -585,7 +595,8 @@ pub fn parse_preset_geometry(r: &mut Reader<'_>, e: &BytesStart<'_>, empty: bool
                 if is(gd, b"gd") {
                     if let (Some(name), Some(f)) = (attr(gd, b"name"), attr(gd, b"fmla")) {
                         // Adjustment formulas are always `val <n>`.
-                        if let Some(v) = f.strip_prefix("val ").and_then(|s| s.trim().parse().ok()) {
+                        if let Some(v) = f.strip_prefix("val ").and_then(|s| s.trim().parse().ok())
+                        {
                             adjustments.push((name, v));
                         }
                     }
@@ -813,10 +824,7 @@ mod tests {
     use crate::model::color::SchemeLookup;
 
     /// Enters the first element of `xml` and hands the reader to `f`.
-    fn parse_first<T>(
-        xml: &str,
-        f: impl FnOnce(&mut Reader<'_>, &BytesStart<'_>, bool) -> T,
-    ) -> T {
+    fn parse_first<T>(xml: &str, f: impl FnOnce(&mut Reader<'_>, &BytesStart<'_>, bool) -> T) -> T {
         let mut r = Reader::new(xml.as_bytes());
         let mut buf = Vec::new();
         loop {
@@ -846,7 +854,7 @@ mod tests {
     fn srgb_colour_with_a_modifier_stack() {
         let c = parse_first(
             r#"<a:srgbClr val="4472C4"><a:lumMod val="60000"/><a:lumOff val="40000"/></a:srgbClr>"#,
-            |r, e, empty| parse_color_element(r, e, empty),
+            parse_color_element,
         )
         .expect("colour");
         assert_eq!(c.spec, ColorSpec::Srgb(Color::rgb(0x44, 0x72, 0xC4)));
@@ -865,7 +873,7 @@ mod tests {
     fn solid_fill_unwraps_to_its_colour() {
         let f = parse_first(
             r#"<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>"#,
-            |r, e, empty| parse_fill(r, e, empty),
+            parse_fill,
         )
         .expect("fill");
         match f {
@@ -877,14 +885,14 @@ mod tests {
     #[test]
     fn no_fill_and_group_fill_are_distinct_from_absent() {
         assert_eq!(
-            parse_first(r#"<a:noFill/>"#, |r, e, m| parse_fill(r, e, m)),
+            parse_first(r#"<a:noFill/>"#, parse_fill),
             Some(Fill::NoFill)
         );
         assert_eq!(
-            parse_first(r#"<a:grpFill/>"#, |r, e, m| parse_fill(r, e, m)),
+            parse_first(r#"<a:grpFill/>"#, parse_fill),
             Some(Fill::Group)
         );
-        assert_eq!(parse_first(r#"<a:effectLst/>"#, |r, e, m| parse_fill(r, e, m)), None);
+        assert_eq!(parse_first(r#"<a:effectLst/>"#, parse_fill), None);
     }
 
     #[test]
@@ -897,7 +905,7 @@ mod tests {
                  </a:gsLst>
                  <a:lin ang="5400000" scaled="1"/>
                </a:gradFill>"#,
-            |r, e, empty| parse_fill(r, e, empty),
+            parse_fill,
         )
         .expect("fill");
         match f {
@@ -920,7 +928,7 @@ mod tests {
                  <a:srcRect l="10000" t="0" r="20000" b="5000"/>
                  <a:stretch><a:fillRect/></a:stretch>
                </a:blipFill>"#,
-            |r, e, empty| parse_fill(r, e, empty),
+            parse_fill,
         )
         .expect("fill");
         match f {
@@ -943,7 +951,7 @@ mod tests {
                  <a:round/>
                  <a:tailEnd type="triangle" w="lg" len="lg"/>
                </a:ln>"#,
-            |r, e, empty| parse_line(r, e, empty),
+            parse_line,
         );
         assert_eq!(l.width, Some(28_575));
         assert_eq!(l.cap, Some(LineCapStyle::Round));
@@ -957,13 +965,16 @@ mod tests {
 
     #[test]
     fn an_empty_line_element_specifies_nothing() {
-        let l = parse_first(r#"<a:ln/>"#, |r, e, empty| parse_line(r, e, empty));
-        assert!(l.is_empty(), "an <a:ln/> with no attributes must stay inheritable");
+        let l = parse_first(r#"<a:ln/>"#, parse_line);
+        assert!(
+            l.is_empty(),
+            "an <a:ln/> with no attributes must stay inheritable"
+        );
     }
 
     #[test]
     fn a_line_with_nofill_is_specified_as_invisible() {
-        let l = parse_first(r#"<a:ln><a:noFill/></a:ln>"#, |r, e, empty| parse_line(r, e, empty));
+        let l = parse_first(r#"<a:ln><a:noFill/></a:ln>"#, parse_line);
         assert_eq!(l.fill, Fill::NoFill);
         assert!(!l.is_empty());
     }
@@ -975,7 +986,7 @@ mod tests {
                  <a:off x="914400" y="457200"/>
                  <a:ext cx="1828800" cy="914400"/>
                </a:xfrm>"#,
-            |r, e, empty| parse_xfrm(r, e, empty),
+            parse_xfrm,
         );
         assert_eq!((t.offset_x, t.offset_y), (914_400, 457_200));
         assert_eq!((t.extent_x, t.extent_y), (1_828_800, 914_400));
@@ -986,7 +997,7 @@ mod tests {
 
     #[test]
     fn an_absent_xfrm_is_marked_unspecified_so_it_can_inherit() {
-        let t = parse_first(r#"<a:xfrm/>"#, |r, e, empty| parse_xfrm(r, e, empty));
+        let t = parse_first(r#"<a:xfrm/>"#, parse_xfrm);
         assert!(!t.specified);
     }
 
@@ -994,7 +1005,7 @@ mod tests {
     fn group_xfrm_defaults_a_missing_child_extent_to_its_own() {
         let g = parse_first(
             r#"<a:xfrm><a:off x="0" y="0"/><a:ext cx="1000" cy="500"/></a:xfrm>"#,
-            |r, e, empty| parse_group_xfrm(r, e, empty),
+            parse_group_xfrm,
         );
         assert_eq!(g.child_extent_x, 1000);
         assert_eq!(g.child_scale(), (1.0, 1.0));
@@ -1004,7 +1015,7 @@ mod tests {
     fn preset_geometry_keeps_its_adjustments() {
         let g = parse_first(
             r#"<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom>"#,
-            |r, e, empty| parse_geometry(r, e, empty),
+            parse_geometry,
         )
         .expect("geometry");
         match g {
@@ -1033,7 +1044,7 @@ mod tests {
                    </a:path>
                  </a:pathLst>
                </a:custGeom>"#,
-            |r, e, empty| parse_geometry(r, e, empty),
+            parse_geometry,
         )
         .expect("geometry");
         let Geometry::Custom(c) = g else {
@@ -1044,7 +1055,10 @@ mod tests {
         let p = c.paths.first().expect("path");
         assert_eq!(p.width, Some(100));
         assert_eq!(p.commands.len(), 4);
-        assert!(matches!(p.commands.first(), Some(GeomCommand::MoveTo(_, _))));
+        assert!(matches!(
+            p.commands.first(),
+            Some(GeomCommand::MoveTo(_, _))
+        ));
         // A guide name is kept unevaluated until the shape's size is known.
         assert!(matches!(
             p.commands.get(1),
@@ -1076,11 +1090,18 @@ mod tests {
         // mistaken for a direct child of <a:ln>.
         let l = parse_first(
             r#"<a:ln w="100"><a:mysteryElement><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:mysteryElement><a:prstDash val="dot"/></a:ln>"#,
-            |r, e, empty| parse_line(r, e, empty),
+            parse_line,
         );
         assert_eq!(l.width, Some(100));
-        assert_eq!(l.dash, Some(DashStyle::Dot), "parser must still see the sibling");
-        assert!(!l.fill.is_specified(), "the nested fill must not have been adopted");
+        assert_eq!(
+            l.dash,
+            Some(DashStyle::Dot),
+            "parser must still see the sibling"
+        );
+        assert!(
+            !l.fill.is_specified(),
+            "the nested fill must not have been adopted"
+        );
     }
 
     #[test]

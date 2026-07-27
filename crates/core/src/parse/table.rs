@@ -151,7 +151,9 @@ fn apply_cell_props_attrs(e: &quick_xml::events::BytesStart<'_>, cell: &mut Tabl
     cell.margin_right = attr_i64(e, b"marR");
     cell.margin_top = attr_i64(e, b"marT");
     cell.margin_bottom = attr_i64(e, b"marB");
-    cell.vertical_anchor = attr(e, b"anchor").as_deref().and_then(VerticalAnchor::parse);
+    cell.vertical_anchor = attr(e, b"anchor")
+        .as_deref()
+        .and_then(VerticalAnchor::parse);
 }
 
 /// Squares off the grid.
@@ -213,7 +215,9 @@ mod tests {
         assert!(t.props.first_row && t.props.band_row);
         assert_eq!(t.props.style_id.as_deref(), Some("{5C22544A}"));
         assert_eq!(
-            t.cell(0, 1).and_then(|c| c.text.as_ref()).map(|t| t.plain_text()),
+            t.cell(0, 1)
+                .and_then(|c| c.text.as_ref())
+                .map(|t| t.plain_text()),
             Some("B1".into())
         );
     }
@@ -234,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn cell_borders_and_fill_are_read_from_tcPr() {
+    fn cell_borders_and_fill_are_read_from_the_cell_properties() {
         let t = table(
             r#"<a:tbl>
                  <a:tblGrid><a:gridCol w="100"/></a:tblGrid>
@@ -249,7 +253,10 @@ mod tests {
         );
         let c = t.cell(0, 0).expect("cell");
         assert_eq!(c.border_bottom.width, Some(12_700));
-        assert!(c.border_top.is_empty(), "unspecified borders stay inheritable");
+        assert!(
+            c.border_top.is_empty(),
+            "unspecified borders stay inheritable"
+        );
         assert!(matches!(c.fill, crate::model::fill::Fill::Solid(_)));
         assert_eq!(c.margin_left, Some(0));
         assert_eq!(c.vertical_anchor, Some(VerticalAnchor::Middle));

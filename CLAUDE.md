@@ -80,11 +80,11 @@ in a place the drawn text does not actually reach.
 | build | raw | gzipped |
 |---|---|---|
 | empty `wasm-bindgen` crate (baseline) | 27 KB | 9 KB |
-| **the whole viewer as it stands** | **592 KB** | **265 KB** |
+| **the whole viewer, M0–M5 complete** | **710 KB** | **313 KB** |
 | baseline + `cosmic-text` 0.14, shaping one line | 788 KB | 302 KB |
 | ⇒ cosmic-text's own contribution | ~761 KB | **~293 KB** |
 
-Adding `cosmic-text` would more than double the download — and that is *before* fonts. The
+Adding `cosmic-text` would roughly double the download — and that is *before* fonts. The
 browser will not hand us its font files, so deterministic metrics also mean shipping the
 faces to measure against: a single Carlito WOFF2 is ~120 KB, and a set covering the
 Calibri/Cambria/Arial/Times substitutions in `text::fallbacks_for` is comfortably 500 KB
@@ -101,6 +101,14 @@ the zoomed size, so the same deck breaks identically at every zoom level and DPR
 browser — the common case for "it moved". And `text::fallbacks_for` puts *metric-compatible*
 substitutes ahead of generic families (Carlito for Calibri, Liberation Sans for Arial), so
 a missing face keeps its wrap points rather than reflowing the slide.
+
+### What the evidence says so far
+
+`npm run test:browsers` renders every fixture in Chromium, Firefox and WebKit and compares
+them. On the current suite — including the deliberately wrap-heavy `m2` — the extracted
+text is **identical in all three**, and the proportion of non-background pixels agrees to
+within 0.2%. So the theoretical divergence has not produced a single differing wrap point
+yet. That is the check to run before reopening this decision.
 
 ### When to revisit
 

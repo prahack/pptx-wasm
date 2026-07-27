@@ -21,16 +21,26 @@ use crate::error::{Error, Result};
 
 /// Relationship type URIs, minus their shared prefix.
 pub mod rel_type {
-    pub const OFFICE_DOC: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-    pub const SLIDE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
-    pub const SLIDE_LAYOUT: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
-    pub const SLIDE_MASTER: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
-    pub const NOTES_SLIDE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
-    pub const THEME: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
-    pub const IMAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-    pub const CHART: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
-    pub const HYPERLINK: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
-    pub const FONT: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
+    pub const OFFICE_DOC: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
+    pub const SLIDE: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+    pub const SLIDE_LAYOUT: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
+    pub const SLIDE_MASTER: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
+    pub const NOTES_SLIDE: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
+    pub const THEME: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+    pub const IMAGE: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+    pub const CHART: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+    pub const HYPERLINK: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+    pub const FONT: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 }
 
 /// A read-only `.pptx` package.
@@ -100,7 +110,10 @@ impl Package {
         // Guard against a zip bomb declaring an implausible inflated size.
         const MAX_PART: u64 = 512 * 1024 * 1024;
         if entry.size() > MAX_PART {
-            log::warn!("part {normalized} declares {} bytes; refusing", entry.size());
+            log::warn!(
+                "part {normalized} declares {} bytes; refusing",
+                entry.size()
+            );
             return None;
         }
         let mut buf = Vec::with_capacity(entry.size() as usize);
@@ -167,7 +180,10 @@ impl Package {
     /// (slide → layout, layout → master, master → theme all work this way).
     pub fn resolve_single(&self, part_name: &str, rel_type: &str) -> Option<String> {
         let rels = self.relationships(part_name);
-        let target = rels.by_type(rel_type).next().map(|r| r.absolute_target.clone());
+        let target = rels
+            .by_type(rel_type)
+            .next()
+            .map(|r| r.absolute_target.clone());
         target
     }
 }
@@ -183,8 +199,8 @@ mod tests {
         let mut buf = Vec::new();
         {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
-            let opts: zip::write::FileOptions<'_, ()> =
-                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
             for (name, data) in entries {
                 w.start_file(*name, opts).expect("start_file");
                 w.write_all(data).expect("write");
@@ -203,16 +219,28 @@ mod tests {
 
     #[test]
     fn opens_and_reads_a_part() {
-        let zip = build_zip(&[("[Content_Types].xml", CT), ("ppt/presentation.xml", b"<p/>")]);
+        let zip = build_zip(&[
+            ("[Content_Types].xml", CT),
+            ("ppt/presentation.xml", b"<p/>"),
+        ]);
         let pkg = Package::open(zip).expect("open");
-        assert_eq!(pkg.part("ppt/presentation.xml").as_deref(), Some(&b"<p/>"[..]));
-        assert_eq!(pkg.part("/ppt/presentation.xml").as_deref(), Some(&b"<p/>"[..]));
+        assert_eq!(
+            pkg.part("ppt/presentation.xml").as_deref(),
+            Some(&b"<p/>"[..])
+        );
+        assert_eq!(
+            pkg.part("/ppt/presentation.xml").as_deref(),
+            Some(&b"<p/>"[..])
+        );
         assert!(pkg.part("ppt/nope.xml").is_none());
     }
 
     #[test]
     fn part_lookup_is_case_insensitive() {
-        let zip = build_zip(&[("[Content_Types].xml", CT), ("ppt/Slides/Slide1.xml", b"<s/>")]);
+        let zip = build_zip(&[
+            ("[Content_Types].xml", CT),
+            ("ppt/Slides/Slide1.xml", b"<s/>"),
+        ]);
         let pkg = Package::open(zip).expect("open");
         assert!(pkg.has_part("ppt/slides/slide1.xml"));
         assert!(pkg.part("PPT/SLIDES/SLIDE1.XML").is_some());
@@ -236,7 +264,10 @@ mod tests {
         let pkg = Package::open(zip).expect("open");
         let first = pkg.part("a.xml").expect("first");
         let second = pkg.part("a.xml").expect("second");
-        assert!(std::rc::Rc::ptr_eq(&first, &second), "second read should hit the cache");
+        assert!(
+            std::rc::Rc::ptr_eq(&first, &second),
+            "second read should hit the cache"
+        );
     }
 
     #[test]
@@ -261,9 +292,13 @@ mod tests {
         ]);
         let pkg = Package::open(zip).expect("open");
 
-        assert_eq!(pkg.resolve_target("", "rId1").as_deref(), Some("ppt/presentation.xml"));
         assert_eq!(
-            pkg.resolve_target("ppt/slides/slide1.xml", "rId1").as_deref(),
+            pkg.resolve_target("", "rId1").as_deref(),
+            Some("ppt/presentation.xml")
+        );
+        assert_eq!(
+            pkg.resolve_target("ppt/slides/slide1.xml", "rId1")
+                .as_deref(),
             Some("ppt/slideLayouts/slideLayout1.xml")
         );
         assert_eq!(
@@ -276,7 +311,10 @@ mod tests {
 
     #[test]
     fn a_part_with_no_rels_file_yields_an_empty_set() {
-        let zip = build_zip(&[("[Content_Types].xml", CT), ("ppt/slides/slide1.xml", b"<s/>")]);
+        let zip = build_zip(&[
+            ("[Content_Types].xml", CT),
+            ("ppt/slides/slide1.xml", b"<s/>"),
+        ]);
         let pkg = Package::open(zip).expect("open");
         assert!(pkg.relationships("ppt/slides/slide1.xml").is_empty());
         assert_eq!(pkg.resolve_target("ppt/slides/slide1.xml", "rId1"), None);

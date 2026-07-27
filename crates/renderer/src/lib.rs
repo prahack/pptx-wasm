@@ -14,6 +14,9 @@
 //!   is how `cargo test` can assert on renderer behaviour without a browser.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
+// Tests are where a failed assumption *should* abort loudly, so the panic lints are
+// lifted there. The deny above is about the shipping code paths.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod cull;
 pub mod record;
@@ -79,18 +82,12 @@ impl ImageSource for NoImages {
 /// Commands that cannot affect a visible pixel are skipped — see [`cull`]. This never
 /// changes the output, and on a dense slide or a zoomed-in view it is the difference
 /// between holding a frame and not.
-pub fn render<R: Renderer>(
-    backend: &mut R,
-    dl: &DisplayList,
-    view: &View,
-) -> Result<(), R::Error> {
+pub fn render<R: Renderer>(backend: &mut R, dl: &DisplayList, view: &View) -> Result<(), R::Error> {
     let root = view.transform_for(dl.width_pt, dl.height_pt);
     backend.begin_frame(dl, root)?;
     let (w, h) = view.canvas_pixels();
-    let mut culler = cull::Culler::new(
-        pptx_core::dl::Rect::new(0.0, 0.0, w as f32, h as f32),
-        root,
-    );
+    let mut culler =
+        cull::Culler::new(pptx_core::dl::Rect::new(0.0, 0.0, w as f32, h as f32), root);
     for cmd in &dl.commands {
         if culler.should_skip(cmd) {
             continue;

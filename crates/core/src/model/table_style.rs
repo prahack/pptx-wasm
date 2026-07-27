@@ -109,7 +109,11 @@ impl TableStyle {
             let last = usize::from(props.last_col);
             if pos.col >= first && pos.col + last < pos.col_count {
                 let band = (pos.col - first) % 2;
-                parts.push(if band == 0 { &self.band1_v } else { &self.band2_v });
+                parts.push(if band == 0 {
+                    &self.band1_v
+                } else {
+                    &self.band2_v
+                });
             }
         }
         if props.band_row {
@@ -117,7 +121,11 @@ impl TableStyle {
             let last = usize::from(props.last_row);
             if pos.row >= first && pos.row + last < pos.row_count {
                 let band = (pos.row - first) % 2;
-                parts.push(if band == 0 { &self.band1_h } else { &self.band2_h });
+                parts.push(if band == 0 {
+                    &self.band1_h
+                } else {
+                    &self.band2_h
+                });
             }
         }
         if props.first_col && pos.is_first_col() {
@@ -349,7 +357,10 @@ mod tests {
         };
         let resolved = styles.get(None);
         assert_eq!(resolved.name, "Table Grid");
-        assert!(!resolved.whole_table.top.is_empty(), "a fallback must still draw rules");
+        assert!(
+            !resolved.whole_table.top.is_empty(),
+            "a fallback must still draw rules"
+        );
     }
 
     #[test]
@@ -370,7 +381,9 @@ mod tests {
         let props = header_and_bands();
         let header = style.resolve(pos(0, 0), &props);
         match header.fill {
-            Fill::Solid(ref c) => assert!(c.mods.is_empty(), "the header is solid accent, untinted"),
+            Fill::Solid(ref c) => {
+                assert!(c.mods.is_empty(), "the header is solid accent, untinted")
+            }
             ref other => panic!("expected a solid header fill, got {other:?}"),
         }
         assert_eq!(header.bold, Some(true));
@@ -430,7 +443,11 @@ mod tests {
         };
         let last = style.resolve(pos(4, 0), &props);
         assert_eq!(last.bold, Some(true));
-        assert_eq!(last.top.width, Some(25_400), "the total row gets a heavier rule");
+        assert_eq!(
+            last.top.width,
+            Some(25_400),
+            "the total row gets a heavier rule"
+        );
     }
 
     #[test]

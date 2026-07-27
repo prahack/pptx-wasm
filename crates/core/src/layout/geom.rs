@@ -376,7 +376,11 @@ mod tests {
             Vec::new(),
         );
         let out = evaluate(&g, 100.0, 100.0);
-        assert!(out[0].path.points.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+        assert!(out[0]
+            .path
+            .points
+            .iter()
+            .all(|p| p.x.is_finite() && p.y.is_finite()));
     }
 
     #[test]

@@ -23,7 +23,9 @@ impl MeasuredRun {
         if start >= end {
             return 0.0;
         }
-        self.advances.get(start..end).map_or(0.0, |s| s.iter().sum())
+        self.advances
+            .get(start..end)
+            .map_or(0.0, |s| s.iter().sum())
     }
 
     /// Largest `n` such that the first `n` chars fit in `max_width`.

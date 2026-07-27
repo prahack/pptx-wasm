@@ -13,9 +13,7 @@ use super::text::parse_list_style;
 use super::xml::{attr, local_name, Reader};
 
 /// Reads the `<p:cSld>` common to all three part kinds.
-fn parse_common_slide_data(
-    r: &mut Reader<'_>,
-) -> (crate::model::shape::ShapeTree, Background) {
+fn parse_common_slide_data(r: &mut Reader<'_>) -> (crate::model::shape::ShapeTree, Background) {
     let mut tree = crate::model::shape::ShapeTree::default();
     let mut background = Background::Inherit;
     children(r, b"cSld", |r, e, empty| {
@@ -67,19 +65,17 @@ pub fn parse_slide(pres: &Presentation, part_name: &str, xml: &[u8]) -> Slide {
     with_root(
         xml,
         |r, root| {
-            children(r, root, |r, e, empty| {
-                match local_name(e.name().as_ref()) {
-                    b"cSld" => {
-                        if empty {
-                            return true;
-                        }
-                        let (tree, bg) = parse_common_slide_data(r);
-                        slide.tree = tree;
-                        slide.background = bg;
-                        true
+            children(r, root, |r, e, empty| match local_name(e.name().as_ref()) {
+                b"cSld" => {
+                    if empty {
+                        return true;
                     }
-                    _ => false,
+                    let (tree, bg) = parse_common_slide_data(r);
+                    slide.tree = tree;
+                    slide.background = bg;
+                    true
                 }
+                _ => false,
             });
         },
         (),
@@ -138,49 +134,47 @@ pub fn parse_master(pres: &Presentation, part_name: &str, xml: &[u8]) -> SlideMa
     with_root(
         xml,
         |r, root| {
-            children(r, root, |r, e, empty| {
-                match local_name(e.name().as_ref()) {
-                    b"cSld" => {
-                        if empty {
-                            return true;
-                        }
-                        let (tree, bg) = parse_common_slide_data(r);
-                        master.tree = tree;
-                        master.background = bg;
-                        true
+            children(r, root, |r, e, empty| match local_name(e.name().as_ref()) {
+                b"cSld" => {
+                    if empty {
+                        return true;
                     }
-                    b"clrMap" => {
-                        master.color_map = parse_color_map(e);
-                        !empty
-                    }
-                    b"txStyles" => {
-                        if empty {
-                            return true;
-                        }
-                        children(r, b"txStyles", |r, style, style_empty| {
-                            if style_empty {
-                                return true;
-                            }
-                            match local_name(style.name().as_ref()) {
-                                b"titleStyle" => {
-                                    master.title_style = parse_list_style(r, b"titleStyle");
-                                    true
-                                }
-                                b"bodyStyle" => {
-                                    master.body_style = parse_list_style(r, b"bodyStyle");
-                                    true
-                                }
-                                b"otherStyle" => {
-                                    master.other_style = parse_list_style(r, b"otherStyle");
-                                    true
-                                }
-                                _ => false,
-                            }
-                        });
-                        true
-                    }
-                    _ => false,
+                    let (tree, bg) = parse_common_slide_data(r);
+                    master.tree = tree;
+                    master.background = bg;
+                    true
                 }
+                b"clrMap" => {
+                    master.color_map = parse_color_map(e);
+                    !empty
+                }
+                b"txStyles" => {
+                    if empty {
+                        return true;
+                    }
+                    children(r, b"txStyles", |r, style, style_empty| {
+                        if style_empty {
+                            return true;
+                        }
+                        match local_name(style.name().as_ref()) {
+                            b"titleStyle" => {
+                                master.title_style = parse_list_style(r, b"titleStyle");
+                                true
+                            }
+                            b"bodyStyle" => {
+                                master.body_style = parse_list_style(r, b"bodyStyle");
+                                true
+                            }
+                            b"otherStyle" => {
+                                master.other_style = parse_list_style(r, b"otherStyle");
+                                true
+                            }
+                            _ => false,
+                        }
+                    });
+                    true
+                }
+                _ => false,
             });
         },
         (),
@@ -312,7 +306,10 @@ mod tests {
             slide.layout_part.as_deref(),
             Some("ppt/slideLayouts/slideLayout1.xml")
         );
-        assert!(!slide.show_master_shapes, "showMasterSp=\"0\" must be honoured");
+        assert!(
+            !slide.show_master_shapes,
+            "showMasterSp=\"0\" must be honoured"
+        );
     }
 
     #[test]
@@ -321,7 +318,10 @@ mod tests {
         let xml = br#"<p:sld><p:cSld><p:spTree/></p:cSld></p:sld>"#;
         let slide = parse_slide(&pres, "ppt/slides/slide1.xml", xml);
         assert!(slide.show_master_shapes);
-        assert_eq!(slide.layout_part, None, "a slide with no rels has no layout");
+        assert_eq!(
+            slide.layout_part, None,
+            "a slide with no rels has no layout"
+        );
     }
 
     #[test]
@@ -330,10 +330,7 @@ mod tests {
           <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
         </Relationships>"#;
         let xml = br#"<p:sldLayout type="title" preserve="1"><p:cSld name="Title Slide"><p:spTree/></p:cSld></p:sldLayout>"#;
-        let pres = presentation_with(&[(
-            "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
-            rels,
-        )]);
+        let pres = presentation_with(&[("ppt/slideLayouts/_rels/slideLayout1.xml.rels", rels)]);
         let layout = parse_layout(&pres, "ppt/slideLayouts/slideLayout1.xml", xml);
         assert_eq!(layout.layout_type, "title");
         assert_eq!(
@@ -379,7 +376,11 @@ mod tests {
     #[test]
     fn a_default_colour_map_is_used_when_the_element_is_missing() {
         let pres = presentation_with(&[]);
-        let m = parse_master(&pres, "m.xml", br#"<p:sldMaster><p:cSld><p:spTree/></p:cSld></p:sldMaster>"#);
+        let m = parse_master(
+            &pres,
+            "m.xml",
+            br#"<p:sldMaster><p:cSld><p:spTree/></p:cSld></p:sldMaster>"#,
+        );
         assert_eq!(m.color_map, ColorMap::default());
     }
 

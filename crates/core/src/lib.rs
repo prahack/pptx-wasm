@@ -14,6 +14,20 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![deny(unsafe_code)]
 #![warn(clippy::indexing_slicing)]
+// Must come last: lint attributes at the same scope are applied in order, so an `allow`
+// placed above the `warn` above would simply be overridden by it.
+//
+// Tests are where a failed assumption *should* abort loudly — an index panic names the
+// element that failed. The denials above are about the shipping code paths.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+    )
+)]
 
 pub mod dl;
 pub mod emu;

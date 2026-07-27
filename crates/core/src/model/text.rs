@@ -124,7 +124,12 @@ pub enum Spacing {
 }
 
 /// `<a:bodyPr>` — the geometry of the text box itself.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// Every field defaults to `None`, i.e. "not specified". The ECMA defaults are applied by
+/// [`BodyProps::resolved_insets`] and by layout, *after* the inheritance chain has had its
+/// say — baking them in here would make an unset inset indistinguishable from an
+/// explicit `lIns="91440"` and break the chain.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct BodyProps {
     pub anchor: Option<VerticalAnchor>,
     /// `anchorCtr` centres the text block horizontally within the box, independently of
@@ -144,26 +149,6 @@ pub struct BodyProps {
     pub column_gap: Option<Emu>,
     /// `upright` keeps text horizontal even when the shape is rotated.
     pub upright: Option<bool>,
-}
-
-impl Default for BodyProps {
-    fn default() -> Self {
-        BodyProps {
-            anchor: None,
-            anchor_center: None,
-            left_inset: None,
-            top_inset: None,
-            right_inset: None,
-            bottom_inset: None,
-            wrap: None,
-            autofit: None,
-            direction: None,
-            rotation: None,
-            columns: None,
-            column_gap: None,
-            upright: None,
-        }
-    }
 }
 
 impl BodyProps {
@@ -713,7 +698,11 @@ mod tests {
             bold: Some(true),
             ..Default::default()
         });
-        assert_eq!(child.bold, Some(false), "explicit b=\"0\" must not be overwritten");
+        assert_eq!(
+            child.bold,
+            Some(false),
+            "explicit b=\"0\" must not be overwritten"
+        );
     }
 
     #[test]

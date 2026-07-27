@@ -104,10 +104,7 @@ impl Renderer for RecordingRenderer {
             }
             Command::ClipRect(r) => {
                 self.counts.clips += 1;
-                let s = format!(
-                    "clipRect {:.2},{:.2} {:.2}x{:.2}",
-                    r.x, r.y, r.w, r.h
-                );
+                let s = format!("clipRect {:.2},{:.2} {:.2}x{:.2}", r.x, r.y, r.w, r.h);
                 self.line(&s);
             }
             Command::ClipPath { path, rule } => {
@@ -175,7 +172,11 @@ impl Renderer for RecordingRenderer {
                     run.font.to_css(),
                     run.width,
                     if run.decorations.underline { " u" } else { "" },
-                    if run.decorations.strikethrough { " s" } else { "" },
+                    if run.decorations.strikethrough {
+                        " s"
+                    } else {
+                        ""
+                    },
                 );
                 self.line(&s);
             }
@@ -290,7 +291,10 @@ mod tests {
         dl.push(Command::ClipRect(Rect::new(0.0, 0.0, 5.0, 5.0)));
         dl.push(Command::Restore);
         let out = trace(&dl, &view());
-        assert!(out.contains("\n  clipRect"), "clip should be indented: {out}");
+        assert!(
+            out.contains("\n  clipRect"),
+            "clip should be indented: {out}"
+        );
         assert!(!out.contains("UNBALANCED"));
     }
 

@@ -28,18 +28,81 @@ pub fn is_supported(preset: &str) -> bool {
 }
 
 const SUPPORTED: &[&str] = &[
-    "rect", "roundRect", "round1Rect", "round2SameRect", "round2DiagRect", "snip1Rect",
-    "snip2SameRect", "snip2DiagRect", "ellipse", "triangle", "rtTriangle", "diamond",
-    "parallelogram", "trapezoid", "pentagon", "hexagon", "heptagon", "octagon", "decagon",
-    "plus", "star4", "star5", "star6", "star8", "star10", "star12", "rightArrow", "leftArrow",
-    "upArrow", "downArrow", "leftRightArrow", "upDownArrow", "chevron", "homePlate", "can",
-    "cube", "donut", "line", "straightConnector1", "bentConnector2", "bentConnector3",
-    "curvedConnector2", "curvedConnector3", "flowChartProcess", "flowChartDecision",
-    "flowChartTerminator", "flowChartAlternateProcess", "flowChartConnector",
-    "flowChartInputOutput", "flowChartDocument", "flowChartPredefinedProcess", "pie", "chord",
-    "arc", "blockArc", "teardrop", "frame", "corner", "diagStripe", "bevel", "halfFrame",
-    "leftBrace", "rightBrace", "leftBracket", "rightBracket", "wedgeRectCallout", "cloud",
-    "heart", "lightningBolt", "sun", "moon", "smileyFace", "noSmoking", "plaque", "cross",
+    "rect",
+    "roundRect",
+    "round1Rect",
+    "round2SameRect",
+    "round2DiagRect",
+    "snip1Rect",
+    "snip2SameRect",
+    "snip2DiagRect",
+    "ellipse",
+    "triangle",
+    "rtTriangle",
+    "diamond",
+    "parallelogram",
+    "trapezoid",
+    "pentagon",
+    "hexagon",
+    "heptagon",
+    "octagon",
+    "decagon",
+    "plus",
+    "star4",
+    "star5",
+    "star6",
+    "star8",
+    "star10",
+    "star12",
+    "rightArrow",
+    "leftArrow",
+    "upArrow",
+    "downArrow",
+    "leftRightArrow",
+    "upDownArrow",
+    "chevron",
+    "homePlate",
+    "can",
+    "cube",
+    "donut",
+    "line",
+    "straightConnector1",
+    "bentConnector2",
+    "bentConnector3",
+    "curvedConnector2",
+    "curvedConnector3",
+    "flowChartProcess",
+    "flowChartDecision",
+    "flowChartTerminator",
+    "flowChartAlternateProcess",
+    "flowChartConnector",
+    "flowChartInputOutput",
+    "flowChartDocument",
+    "flowChartPredefinedProcess",
+    "pie",
+    "chord",
+    "arc",
+    "blockArc",
+    "teardrop",
+    "frame",
+    "corner",
+    "diagStripe",
+    "bevel",
+    "halfFrame",
+    "leftBrace",
+    "rightBrace",
+    "leftBracket",
+    "rightBracket",
+    "wedgeRectCallout",
+    "cloud",
+    "heart",
+    "lightningBolt",
+    "sun",
+    "moon",
+    "smileyFace",
+    "noSmoking",
+    "plaque",
+    "cross",
 ];
 
 /// Adjustment lookup with the preset's documented defaults filled in.
@@ -315,13 +378,23 @@ impl Builder {
             "donut" | "noSmoking" => {
                 let t = self.adj.frac("adj", 25000.0) * self.ss();
                 let outer = Path::ellipse(self.rect());
-                let inner = Path::ellipse(Rect::new(t, t, (w - 2.0 * t).max(0.0), (h - 2.0 * t).max(0.0)));
+                let inner = Path::ellipse(Rect::new(
+                    t,
+                    t,
+                    (w - 2.0 * t).max(0.0),
+                    (h - 2.0 * t).max(0.0),
+                ));
                 append(outer, &inner)
             }
             "frame" => {
                 let t = self.adj.frac("adj1", 12500.0) * self.ss();
                 let outer = Path::rect(self.rect());
-                let inner = Path::rect(Rect::new(t, t, (w - 2.0 * t).max(0.0), (h - 2.0 * t).max(0.0)));
+                let inner = Path::rect(Rect::new(
+                    t,
+                    t,
+                    (w - 2.0 * t).max(0.0),
+                    (h - 2.0 * t).max(0.0),
+                ));
                 append(outer, &inner)
             }
             "halfFrame" => {
@@ -362,7 +435,12 @@ impl Builder {
             "bevel" => {
                 let t = self.adj.frac("adj", 12500.0) * self.ss();
                 let outer = Path::rect(self.rect());
-                let inner = Path::rect(Rect::new(t, t, (w - 2.0 * t).max(0.0), (h - 2.0 * t).max(0.0)));
+                let inner = Path::rect(Rect::new(
+                    t,
+                    t,
+                    (w - 2.0 * t).max(0.0),
+                    (h - 2.0 * t).max(0.0),
+                ));
                 append(outer, &inner)
             }
             "line" | "straightConnector1" => {
@@ -392,8 +470,7 @@ impl Builder {
             "curvedConnector3" => {
                 let mid = w * self.adj.frac("adj1", 50000.0);
                 let mut p = Path::new();
-                p.move_to(0.0, 0.0)
-                    .cubic_to(mid, 0.0, mid, h, w, h);
+                p.move_to(0.0, 0.0).cubic_to(mid, 0.0, mid, h, w, h);
                 p
             }
             "flowChartDocument" => {
@@ -464,7 +541,14 @@ impl Builder {
                 let a = self.adj.frac("adj", 50000.0).max(0.05);
                 let mut p = Path::new();
                 p.move_to(w, 0.0);
-                p.cubic_to(w * (1.0 - a * 2.0), h * 0.15, w * (1.0 - a * 2.0), h * 0.85, w, h);
+                p.cubic_to(
+                    w * (1.0 - a * 2.0),
+                    h * 0.15,
+                    w * (1.0 - a * 2.0),
+                    h * 0.85,
+                    w,
+                    h,
+                );
                 p.cubic_to(w * 0.1, h * 0.85, w * 0.1, h * 0.15, w, 0.0);
                 p.close();
                 p
@@ -474,8 +558,18 @@ impl Builder {
             "smileyFace" => {
                 let face = Path::ellipse(self.rect());
                 let eye_r = self.ss() * 0.06;
-                let left = Path::ellipse(Rect::new(w * 0.3 - eye_r, h * 0.32 - eye_r, eye_r * 2.0, eye_r * 2.0));
-                let right = Path::ellipse(Rect::new(w * 0.7 - eye_r, h * 0.32 - eye_r, eye_r * 2.0, eye_r * 2.0));
+                let left = Path::ellipse(Rect::new(
+                    w * 0.3 - eye_r,
+                    h * 0.32 - eye_r,
+                    eye_r * 2.0,
+                    eye_r * 2.0,
+                ));
+                let right = Path::ellipse(Rect::new(
+                    w * 0.7 - eye_r,
+                    h * 0.32 - eye_r,
+                    eye_r * 2.0,
+                    eye_r * 2.0,
+                ));
                 let mut mouth = Path::new();
                 mouth.move_to(w * 0.28, h * 0.6);
                 mouth.cubic_to(w * 0.4, h * 0.82, w * 0.6, h * 0.82, w * 0.72, h * 0.6);
@@ -494,7 +588,9 @@ impl Builder {
                 p
             }
             _ => {
-                log::debug!("preset {preset:?} has no path; falling back to its bounding rectangle");
+                log::debug!(
+                    "preset {preset:?} has no path; falling back to its bounding rectangle"
+                );
                 Path::rect(self.rect())
             }
         }
@@ -667,7 +763,10 @@ impl Builder {
                 let t = self.adj.frac("adj3", 25000.0).max(0.01);
                 let (irx, iry) = (rx * (1.0 - t), ry * (1.0 - t));
                 p.arc_to(cx, cy, rx, ry, start, sweep);
-                p.line_to(cx + irx * (start + sweep).cos(), cy + iry * (start + sweep).sin());
+                p.line_to(
+                    cx + irx * (start + sweep).cos(),
+                    cy + iry * (start + sweep).sin(),
+                );
                 p.arc_to(cx, cy, irx, iry, start + sweep, -sweep);
                 p.close();
             }
@@ -687,10 +786,16 @@ impl Builder {
         let mut p = Path::new();
         match preset {
             "leftBracket" => {
-                p.move_to(w, 0.0).line_to(0.0, 0.0).line_to(0.0, h).line_to(w, h);
+                p.move_to(w, 0.0)
+                    .line_to(0.0, 0.0)
+                    .line_to(0.0, h)
+                    .line_to(w, h);
             }
             "rightBracket" => {
-                p.move_to(0.0, 0.0).line_to(w, 0.0).line_to(w, h).line_to(0.0, h);
+                p.move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w, h)
+                    .line_to(0.0, h);
             }
             "leftBrace" => {
                 p.move_to(w, 0.0);
@@ -821,7 +926,10 @@ mod tests {
     fn round_rect_radius_follows_the_adjustment() {
         let square = build("roundRect", 100.0, 100.0, &[("adj".into(), 0.0)]);
         // A zero radius degenerates to a rectangle's four corners plus the close.
-        assert!(square.verbs.len() <= 6, "zero-radius roundRect should be a rectangle");
+        assert!(
+            square.verbs.len() <= 6,
+            "zero-radius roundRect should be a rectangle"
+        );
         let rounded = build("roundRect", 100.0, 100.0, &[("adj".into(), 50000.0)]);
         assert!(rounded.verbs.len() > square.verbs.len());
     }
@@ -843,8 +951,18 @@ mod tests {
 
     #[test]
     fn arrow_heads_respect_the_shaft_and_head_adjustments() {
-        let thin = build("rightArrow", 100.0, 100.0, &[("adj1".into(), 20000.0), ("adj2".into(), 50000.0)]);
-        let thick = build("rightArrow", 100.0, 100.0, &[("adj1".into(), 80000.0), ("adj2".into(), 50000.0)]);
+        let thin = build(
+            "rightArrow",
+            100.0,
+            100.0,
+            &[("adj1".into(), 20000.0), ("adj2".into(), 50000.0)],
+        );
+        let thick = build(
+            "rightArrow",
+            100.0,
+            100.0,
+            &[("adj1".into(), 80000.0), ("adj2".into(), 50000.0)],
+        );
         // The shaft's top edge sits lower on the thin arrow.
         let thin_y = thin.points.first().map(|p| p.y).unwrap_or_default();
         let thick_y = thick.points.first().map(|p| p.y).unwrap_or_default();
@@ -855,8 +973,15 @@ mod tests {
     fn donut_and_frame_emit_two_subpaths_so_the_hole_can_be_cut() {
         for preset in ["donut", "frame"] {
             let p = build(preset, 100.0, 100.0, &[]);
-            let moves = p.verbs.iter().filter(|v| **v == crate::dl::PathVerb::MoveTo).count();
-            assert!(moves >= 2, "{preset} needs an inner subpath, got {moves} MoveTo verbs");
+            let moves = p
+                .verbs
+                .iter()
+                .filter(|v| **v == crate::dl::PathVerb::MoveTo)
+                .count();
+            assert!(
+                moves >= 2,
+                "{preset} needs an inner subpath, got {moves} MoveTo verbs"
+            );
         }
     }
 
@@ -871,7 +996,10 @@ mod tests {
             let pt = p.points.get(i).copied().unwrap_or_default();
             ((pt.x - cx).powi(2) + (pt.y - cy).powi(2)).sqrt()
         };
-        assert!(radius(0) > radius(1), "outer point should be further than inner");
+        assert!(
+            radius(0) > radius(1),
+            "outer point should be further than inner"
+        );
     }
 
     #[test]
@@ -880,7 +1008,9 @@ mod tests {
             for (w, h) in [(0.0, 0.0), (0.0, 100.0), (100.0, 0.0), (-5.0, 10.0)] {
                 let p = build(preset, w, h, &[]);
                 assert!(
-                    p.points.iter().all(|pt| pt.x.is_finite() && pt.y.is_finite()),
+                    p.points
+                        .iter()
+                        .all(|pt| pt.x.is_finite() && pt.y.is_finite()),
                     "{preset} at {w}x{h} produced a non-finite point"
                 );
             }
@@ -891,7 +1021,10 @@ mod tests {
     fn out_of_range_adjustments_are_clamped() {
         for adj in [-500_000.0, 0.0, 999_999.0] {
             let p = build("roundRect", 100.0, 60.0, &[("adj".into(), adj)]);
-            assert!(bounds_within(&p, 100.0, 60.0, 0.5), "adj={adj} escaped the box");
+            assert!(
+                bounds_within(&p, 100.0, 60.0, 0.5),
+                "adj={adj} escaped the box"
+            );
         }
     }
 
@@ -905,7 +1038,12 @@ mod tests {
 
     #[test]
     fn pie_defaults_to_a_full_circle_when_its_angles_are_equal() {
-        let p = build("pie", 100.0, 100.0, &[("adj1".into(), 0.0), ("adj2".into(), 0.0)]);
+        let p = build(
+            "pie",
+            100.0,
+            100.0,
+            &[("adj1".into(), 0.0), ("adj2".into(), 0.0)],
+        );
         assert!(!p.is_empty());
         assert!(bounds_within(&p, 100.0, 100.0, 0.5));
     }

@@ -224,7 +224,9 @@ mod tests {
     #[test]
     fn a_missing_or_broken_file_yields_an_empty_set_rather_than_a_panic() {
         assert!(parse_table_styles(b"").styles.is_empty());
-        assert!(parse_table_styles(b"<a:tblStyleLst><a:tblStyle").styles.is_empty());
+        assert!(parse_table_styles(b"<a:tblStyleLst><a:tblStyle")
+            .styles
+            .is_empty());
         // With no default and no definitions, lookups still return something drawable.
         assert_eq!(parse_table_styles(b"").get(None).name, "Table Grid");
     }

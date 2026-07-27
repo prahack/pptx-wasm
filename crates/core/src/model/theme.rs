@@ -245,7 +245,10 @@ mod tests {
     #[test]
     fn format_scheme_indices_are_one_based_and_zero_means_none() {
         let fs = FormatScheme {
-            fill_styles: vec![Fill::NoFill, Fill::Solid(ColorRef::scheme(SchemeColor::Accent1))],
+            fill_styles: vec![
+                Fill::NoFill,
+                Fill::Solid(ColorRef::scheme(SchemeColor::Accent1)),
+            ],
             ..Default::default()
         };
         assert_eq!(fs.fill(0), None);

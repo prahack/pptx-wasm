@@ -94,10 +94,7 @@ pub fn layout_chart(
         out.push(Command::DrawText(crate::dl::TextRun {
             text: title.clone(),
             font: font.clone(),
-            origin: Point::new(
-                area.x + (area.w - width) / 2.0,
-                area.y + metrics.ascent,
-            ),
+            origin: Point::new(area.x + (area.w - width) / 2.0, area.y + metrics.ascent),
             paint: Paint::Solid(ctx.text_color()),
             advances: measure.measure(&title, &font).advances,
             width,
@@ -214,7 +211,15 @@ impl Ctx<'_> {
         })
     }
 
-    fn label(&self, text: &str, x: f32, y: f32, align: LabelAlign, size: f32, out: &mut Vec<Command>) {
+    fn label(
+        &self,
+        text: &str,
+        x: f32,
+        y: f32,
+        align: LabelAlign,
+        size: f32,
+        out: &mut Vec<Command>,
+    ) {
         if text.is_empty() {
             return;
         }
@@ -380,7 +385,14 @@ fn draw_legend(
         for (label, colour) in &entries {
             draw_swatch(ctx, x, y + (metrics - SWATCH) / 2.0, *colour, chart, out);
             x += SWATCH + PADDING / 2.0;
-            ctx.label(label, x, y + baseline_offset, LabelAlign::Left, LEGEND_SIZE, out);
+            ctx.label(
+                label,
+                x,
+                y + baseline_offset,
+                LabelAlign::Left,
+                LEGEND_SIZE,
+                out,
+            );
             x += ctx.text_width(label, LEGEND_SIZE) + gap;
         }
         return;
@@ -389,7 +401,14 @@ fn draw_legend(
     // Otherwise stack them vertically.
     let mut y = rect.y + (rect.h - metrics * entries.len() as f32).max(0.0) / 2.0;
     for (label, colour) in &entries {
-        draw_swatch(ctx, rect.x + PADDING, y + (metrics - SWATCH) / 2.0, *colour, chart, out);
+        draw_swatch(
+            ctx,
+            rect.x + PADDING,
+            y + (metrics - SWATCH) / 2.0,
+            *colour,
+            chart,
+            out,
+        );
         ctx.label(
             label,
             rect.x + PADDING + SWATCH + PADDING / 2.0,
@@ -453,8 +472,12 @@ fn draw_axes_and_reserve(chart: &Chart, area: Rect, ctx: &Ctx<'_>, out: &mut Vec
     let ticks = tick_values(lo, hi, step);
     let format = value_axis.and_then(|a| a.number_format.as_deref());
 
-    let show_value_labels = value_axis.map(|a| !a.deleted && a.labels_visible).unwrap_or(true);
-    let show_cat_labels = category_axis.map(|a| !a.deleted && a.labels_visible).unwrap_or(true);
+    let show_value_labels = value_axis
+        .map(|a| !a.deleted && a.labels_visible)
+        .unwrap_or(true);
+    let show_cat_labels = category_axis
+        .map(|a| !a.deleted && a.labels_visible)
+        .unwrap_or(true);
 
     let label_height = ctx.line_height(LABEL_SIZE);
     let categories = chart.categories();
@@ -466,8 +489,16 @@ fn draw_axes_and_reserve(chart: &Chart, area: Rect, ctx: &Ctx<'_>, out: &mut Vec
             .map(|c| ctx.text_width(c, LABEL_SIZE))
             .fold(0.0f32, f32::max);
         (
-            if show_cat_labels { widest + PADDING } else { 0.0 },
-            if show_value_labels { label_height + PADDING } else { 0.0 },
+            if show_cat_labels {
+                widest + PADDING
+            } else {
+                0.0
+            },
+            if show_value_labels {
+                label_height + PADDING
+            } else {
+                0.0
+            },
         )
     } else {
         let widest = ticks
@@ -475,8 +506,16 @@ fn draw_axes_and_reserve(chart: &Chart, area: Rect, ctx: &Ctx<'_>, out: &mut Vec
             .map(|v| ctx.text_width(&format_axis_value_for(*v, format), LABEL_SIZE))
             .fold(0.0f32, f32::max);
         (
-            if show_value_labels { widest + PADDING } else { 0.0 },
-            if show_cat_labels { label_height + PADDING } else { 0.0 },
+            if show_value_labels {
+                widest + PADDING
+            } else {
+                0.0
+            },
+            if show_cat_labels {
+                label_height + PADDING
+            } else {
+                0.0
+            },
         )
     };
 
@@ -588,10 +627,14 @@ fn draw_axes_and_reserve(chart: &Chart, area: Rect, ctx: &Ctx<'_>, out: &mut Vec
     let mut baseline = Path::new();
     if horizontal {
         let x = plot_rect.x + plot_rect.w * zero_t;
-        baseline.move_to(x, plot_rect.y).line_to(x, plot_rect.bottom());
+        baseline
+            .move_to(x, plot_rect.y)
+            .line_to(x, plot_rect.bottom());
     } else {
         let y = plot_rect.bottom() - plot_rect.h * zero_t;
-        baseline.move_to(plot_rect.x, y).line_to(plot_rect.right(), y);
+        baseline
+            .move_to(plot_rect.x, y)
+            .line_to(plot_rect.right(), y);
     }
     out.push(Command::StrokePath {
         path: baseline,
@@ -606,8 +649,8 @@ fn scale_for(chart: &Chart, plot: &Plot, axis: Option<&Axis>) -> (f64, f64, f64)
     let (data_lo, data_hi) = chart.value_range(plot);
     // Bars and areas encode value as length from a baseline, so their axis has to include
     // zero. Lines and scatters encode it as position and scale to the data instead.
-    let anchor_zero = matches!(plot.kind, PlotKind::Bar { .. } | PlotKind::Area)
-        || plot.grouping.is_stacked();
+    let anchor_zero =
+        matches!(plot.kind, PlotKind::Bar { .. } | PlotKind::Area) || plot.grouping.is_stacked();
     let (mut lo, mut hi, mut step) = nice_scale(data_lo, data_hi, 5, anchor_zero);
     if let Some(axis) = axis {
         if let Some(min) = axis.min {
@@ -660,7 +703,9 @@ fn draw_plot(
         .sum();
 
     match plot.kind {
-        PlotKind::Bar { horizontal } => draw_bars(chart, plot, rect, colour_base, horizontal, ctx, out),
+        PlotKind::Bar { horizontal } => {
+            draw_bars(chart, plot, rect, colour_base, horizontal, ctx, out)
+        }
         PlotKind::Line | PlotKind::Scatter => draw_lines(chart, plot, rect, colour_base, ctx, out),
         PlotKind::Area => draw_areas(chart, plot, rect, colour_base, ctx, out),
         PlotKind::Pie | PlotKind::Doughnut => draw_pie(chart, plot, rect, ctx, out),
@@ -686,7 +731,12 @@ fn draw_bars(
     out: &mut Vec<Command>,
 ) {
     let (lo, hi, _) = scale_for(chart, plot, chart.value_axis(plot));
-    let points = plot.series.iter().map(|s| s.values.len()).max().unwrap_or(0);
+    let points = plot
+        .series
+        .iter()
+        .map(|s| s.values.len())
+        .max()
+        .unwrap_or(0);
     if points == 0 {
         return;
     }
@@ -751,7 +801,11 @@ fn draw_bars(
             } else {
                 (band - cluster_width) / 2.0 + si as f32 * (bar - overlap)
             };
-            let thickness = if plot.grouping.is_stacked() { cluster_width } else { bar };
+            let thickness = if plot.grouping.is_stacked() {
+                cluster_width
+            } else {
+                bar
+            };
 
             let bar_rect = if horizontal {
                 // Categories run bottom-to-top.
@@ -802,7 +856,12 @@ fn draw_lines(
     out: &mut Vec<Command>,
 ) {
     let (lo, hi, _) = scale_for(chart, plot, chart.value_axis(plot));
-    let points = plot.series.iter().map(|s| s.values.len()).max().unwrap_or(0);
+    let points = plot
+        .series
+        .iter()
+        .map(|s| s.values.len())
+        .max()
+        .unwrap_or(0);
     if points == 0 {
         return;
     }
@@ -829,7 +888,12 @@ fn draw_lines(
                 continue;
             };
             let x = if scatter {
-                let xs = series.x_values.get(i).copied().flatten().unwrap_or(i as f64);
+                let xs = series
+                    .x_values
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .unwrap_or(i as f64);
                 let (xlo, xhi) = series
                     .x_values
                     .iter()
@@ -890,7 +954,12 @@ fn draw_areas(
     out: &mut Vec<Command>,
 ) {
     let (lo, hi, _) = scale_for(chart, plot, chart.value_axis(plot));
-    let points = plot.series.iter().map(|s| s.values.len()).max().unwrap_or(0);
+    let points = plot
+        .series
+        .iter()
+        .map(|s| s.values.len())
+        .max()
+        .unwrap_or(0);
     if points < 2 {
         return;
     }
@@ -976,10 +1045,7 @@ fn draw_pie(chart: &Chart, plot: &Plot, rect: Rect, ctx: &Ctx<'_>, out: &mut Vec
 
         let mut path = Path::new();
         if hole > 0.0 {
-            path.move_to(
-                centre.x + hole * angle.cos(),
-                centre.y + hole * angle.sin(),
-            );
+            path.move_to(centre.x + hole * angle.cos(), centre.y + hole * angle.sin());
             path.line_to(
                 centre.x + radius * angle.cos(),
                 centre.y + radius * angle.sin(),
@@ -1042,7 +1108,10 @@ mod tests {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
             let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
             w.start_file("[Content_Types].xml", opts).expect("s");
-            w.write_all(br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#).expect("w");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("w");
             w.finish().expect("f");
         }
         let pkg = crate::opc::Package::open(buf).expect("open");
@@ -1147,7 +1216,10 @@ mod tests {
                 rect.x >= FRAME.x - 0.5 && rect.right() <= FRAME.right() + 0.5,
                 "bar escaped the frame: {rect:?}"
             );
-            assert!(rect.bottom() <= FRAME.bottom() + 0.5, "bar below the frame: {rect:?}");
+            assert!(
+                rect.bottom() <= FRAME.bottom() + 0.5,
+                "bar below the frame: {rect:?}"
+            );
         }
     }
 
@@ -1161,8 +1233,14 @@ mod tests {
         // The first series' values are 1204, 988, 1455 — so bar 0 > bar 1 in height, and
         // bar 2 is the tallest of the three.
         let heights: Vec<f32> = bars.iter().step_by(2).map(|(r, _)| r.h).collect();
-        assert!(heights[0] > heights[1], "1204 should be taller than 988: {heights:?}");
-        assert!(heights[2] > heights[0], "1455 should be tallest: {heights:?}");
+        assert!(
+            heights[0] > heights[1],
+            "1204 should be taller than 988: {heights:?}"
+        );
+        assert!(
+            heights[2] > heights[0],
+            "1455 should be tallest: {heights:?}"
+        );
     }
 
     #[test]
@@ -1171,7 +1249,10 @@ mod tests {
         let t = texts(&cmds);
         assert!(t.contains(&"Revenue".to_string()), "{t:?}");
         assert!(t.contains(&"North".to_string()), "{t:?}");
-        assert!(t.contains(&"2023".to_string()) && t.contains(&"2024".to_string()), "{t:?}");
+        assert!(
+            t.contains(&"2023".to_string()) && t.contains(&"2024".to_string()),
+            "{t:?}"
+        );
     }
 
     #[test]
@@ -1198,13 +1279,13 @@ mod tests {
             .collect();
         assert_eq!(bars.len(), 6);
         // The two bars of a stacked category share an x range and sit on top of each other.
-        let first_category: Vec<_> = bars
-            .iter()
-            .filter(|(r, _)| r.x < FRAME.w / 3.0)
-            .collect();
+        let first_category: Vec<_> = bars.iter().filter(|(r, _)| r.x < FRAME.w / 3.0).collect();
         assert_eq!(first_category.len(), 2);
         let (a, b) = (first_category[0].0, first_category[1].0);
-        assert!((a.x - b.x).abs() < 0.5, "stacked bars share a column: {a:?} {b:?}");
+        assert!(
+            (a.x - b.x).abs() < 0.5,
+            "stacked bars share a column: {a:?} {b:?}"
+        );
     }
 
     #[test]
@@ -1275,10 +1356,9 @@ mod tests {
         let wedges = cmds
             .iter()
             .filter(|c| match c {
-                Command::FillPath { path, .. } => path
-                    .verbs
-                    .iter()
-                    .any(|v| *v == crate::dl::PathVerb::CubicTo),
+                Command::FillPath { path, .. } => {
+                    path.verbs.contains(&crate::dl::PathVerb::CubicTo)
+                }
                 _ => false,
             })
             .count();
@@ -1314,7 +1394,10 @@ mod tests {
             })
             .max()
             .unwrap_or(0);
-        assert!(curves >= 2, "a doughnut wedge needs an inner and an outer arc");
+        assert!(
+            curves >= 2,
+            "a doughnut wedge needs an inner and an outer arc"
+        );
     }
 
     #[test]
@@ -1356,7 +1439,10 @@ mod tests {
         let tallest = bars.iter().map(|(r, _)| r.h).fold(0.0f32, f32::max);
         // With the axis stretched to 4000, the tallest bar (1455) uses well under half
         // the plot height.
-        assert!(tallest < FRAME.h * 0.45, "bar height {tallest} suggests the bound was ignored");
+        assert!(
+            tallest < FRAME.h * 0.45,
+            "bar height {tallest} suggests the bound was ignored"
+        );
     }
 
     #[test]
@@ -1372,7 +1458,9 @@ mod tests {
             for cmd in run(&chart) {
                 if let Command::FillPath { path, .. } | Command::StrokePath { path, .. } = cmd {
                     assert!(
-                        path.points.iter().all(|p| p.x.is_finite() && p.y.is_finite()),
+                        path.points
+                            .iter()
+                            .all(|p| p.x.is_finite() && p.y.is_finite()),
                         "non-finite point for {values:?}"
                     );
                 }

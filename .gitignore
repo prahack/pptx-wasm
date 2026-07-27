@@ -10,3 +10,6 @@
 /tests/golden/.oracle-cache
 *.tsbuildinfo
 .DS_Store
+/examples/*/dist
+/examples/*/public/deck.pptx
+*.tgz

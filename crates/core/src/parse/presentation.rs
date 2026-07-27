@@ -18,8 +18,7 @@ const DEFAULT_WIDTH: i64 = 9_144_000;
 const DEFAULT_HEIGHT: i64 = 6_858_000;
 
 pub fn parse(package: Package) -> Result<Presentation> {
-    let part_name = find_presentation_part(&package)
-        .ok_or(Error::NotAPresentation)?;
+    let part_name = find_presentation_part(&package).ok_or(Error::NotAPresentation)?;
     let xml = package
         .part(&part_name)
         .ok_or_else(|| Error::MissingPart(part_name.clone()))?;
@@ -44,8 +43,12 @@ pub fn parse(package: Package) -> Result<Presentation> {
     children(&mut r, &root, |r, e, empty| {
         match local_name(e.name().as_ref()) {
             b"sldSz" => {
-                width = attr_i64(e, b"cx").filter(|v| *v > 0).unwrap_or(DEFAULT_WIDTH);
-                height = attr_i64(e, b"cy").filter(|v| *v > 0).unwrap_or(DEFAULT_HEIGHT);
+                width = attr_i64(e, b"cx")
+                    .filter(|v| *v > 0)
+                    .unwrap_or(DEFAULT_WIDTH);
+                height = attr_i64(e, b"cy")
+                    .filter(|v| *v > 0)
+                    .unwrap_or(DEFAULT_HEIGHT);
                 false
             }
             b"sldIdLst" => {
@@ -134,7 +137,12 @@ fn find_presentation_part(package: &Package) -> Option<String> {
         content_type::SLIDESHOW,
         content_type::TEMPLATE,
     ] {
-        if let Some(p) = package.content_types().parts_with_type(ct).into_iter().next() {
+        if let Some(p) = package
+            .content_types()
+            .parts_with_type(ct)
+            .into_iter()
+            .next()
+        {
             if package.has_part(&p) {
                 return Some(p);
             }
@@ -233,9 +241,18 @@ mod tests {
             ("_rels/.rels", ROOT_RELS),
             ("ppt/presentation.xml", PRES),
             ("ppt/_rels/presentation.xml.rels", PRES_RELS),
-            ("ppt/slides/slide1.xml", b"<p:sld><p:cSld><p:spTree/></p:cSld></p:sld>"),
-            ("ppt/slides/slide2.xml", b"<p:sld><p:cSld><p:spTree/></p:cSld></p:sld>"),
-            ("ppt/slideMasters/slideMaster1.xml", b"<p:sldMaster><p:cSld><p:spTree/></p:cSld></p:sldMaster>"),
+            (
+                "ppt/slides/slide1.xml",
+                b"<p:sld><p:cSld><p:spTree/></p:cSld></p:sld>",
+            ),
+            (
+                "ppt/slides/slide2.xml",
+                b"<p:sld><p:cSld><p:spTree/></p:cSld></p:sld>",
+            ),
+            (
+                "ppt/slideMasters/slideMaster1.xml",
+                b"<p:sldMaster><p:cSld><p:spTree/></p:cSld></p:sldMaster>",
+            ),
         ])
     }
 
@@ -253,12 +270,15 @@ mod tests {
     }
 
     #[test]
-    fn slide_order_follows_sldIdLst_not_the_relationship_file() {
+    fn slide_order_follows_the_slide_id_list_not_the_relationship_file() {
         // rId3 is listed second in sldIdLst; both orders happen to agree here, so assert
         // the mapping explicitly rather than the count.
         let p = crate::open(deck()).expect("open");
         let names: Vec<_> = p.slides().iter().map(|s| s.part_name.as_str()).collect();
-        assert_eq!(names, vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml"]);
+        assert_eq!(
+            names,
+            vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml"]
+        );
     }
 
     #[test]
@@ -339,7 +359,10 @@ mod tests {
         assert_eq!(p.embedded_fonts.len(), 1);
         let f = p.embedded_fonts.first().expect("font");
         assert_eq!(f.typeface, "Corporate Sans");
-        assert_eq!(f.variants(), vec![("rId10", false, false), ("rId11", true, false)]);
+        assert_eq!(
+            f.variants(),
+            vec![("rId10", false, false), ("rId11", true, false)]
+        );
     }
 
     #[test]
@@ -362,7 +385,10 @@ mod tests {
         let bytes = zip(&[
             ("[Content_Types].xml", ct),
             ("_rels/.rels", root_rels),
-            ("deck/main.xml", br#"<p:presentation><p:sldSz cx="100" cy="50"/></p:presentation>"#),
+            (
+                "deck/main.xml",
+                br#"<p:presentation><p:sldSz cx="100" cy="50"/></p:presentation>"#,
+            ),
         ]);
         let p = crate::open(bytes).expect("open");
         assert_eq!((p.slide_width, p.slide_height), (100, 50));

@@ -122,12 +122,7 @@ impl Culler {
             let spread = (s.blur * 3.0) * scale;
             device = inflate_rect(device, spread);
             let (dx, dy) = (s.offset_x * scale, s.offset_y * scale);
-            device = device.union(&Rect::new(
-                device.x + dx,
-                device.y + dy,
-                device.w,
-                device.h,
-            ));
+            device = device.union(&Rect::new(device.x + dx, device.y + dy, device.w, device.h));
         }
         device
     }
@@ -298,7 +293,10 @@ mod tests {
             Command::SetShadow(None),
             Command::Restore,
         ] {
-            assert!(!c.should_skip(&cmd), "state command {cmd:?} must not be skipped");
+            assert!(
+                !c.should_skip(&cmd),
+                "state command {cmd:?} must not be skipped"
+            );
         }
     }
 

@@ -12,6 +12,7 @@ pub mod table_style;
 pub mod text;
 pub mod theme;
 
+pub use chart::Chart;
 pub use color::{ColorMod, ColorRef, ColorSpec, SchemeColor};
 pub use fill::{Effects, Fill, Line};
 pub use geometry::{Geometry, GroupTransform, Transform2D};
@@ -20,7 +21,6 @@ pub use shape::{
     Background, ColorMap, Placeholder, PlaceholderType, Shape, ShapeKind, ShapeTree, Slide,
     SlideLayout, SlideMaster,
 };
-pub use chart::Chart;
 pub use table::{Table, TableCell, TableRow};
 pub use table_style::{CellPosition, PartStyle, TableStyle, TableStyles};
 pub use text::{BodyProps, ListStyle, Paragraph, ParagraphProps, Run, RunProps, TextBody};
@@ -206,10 +206,7 @@ impl Presentation {
     /// Office default.
     pub fn chain_for(&self, index: usize) -> Option<SlideChain> {
         let slide = self.slide(index)?;
-        let layout = slide
-            .layout_part
-            .as_deref()
-            .and_then(|p| self.layout(p));
+        let layout = slide.layout_part.as_deref().and_then(|p| self.layout(p));
         let master = layout
             .as_ref()
             .and_then(|l| l.master_part.as_deref())
@@ -267,11 +264,18 @@ pub struct SlideChain {
 impl SlideChain {
     /// The colour map in force, which comes from the master.
     pub fn color_map(&self) -> ColorMap {
-        self.master.as_ref().map(|m| m.color_map).unwrap_or_default()
+        self.master
+            .as_ref()
+            .map(|m| m.color_map)
+            .unwrap_or_default()
     }
 
     /// Resolves a colour reference in this slide's context.
-    pub fn resolve_color(&self, c: &ColorRef, placeholder: Option<crate::dl::Color>) -> crate::dl::Color {
+    pub fn resolve_color(
+        &self,
+        c: &ColorRef,
+        placeholder: Option<crate::dl::Color>,
+    ) -> crate::dl::Color {
         self.theme.resolve_color(c, self.color_map(), placeholder)
     }
 
@@ -320,8 +324,10 @@ mod tests {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
             let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
             w.start_file("[Content_Types].xml", opts).expect("start");
-            w.write_all(br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#)
-                .expect("write");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("write");
             w.finish().expect("finish");
         }
         buf

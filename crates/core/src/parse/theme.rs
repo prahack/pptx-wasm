@@ -339,8 +339,15 @@ mod tests {
         assert!(matches!(t.formats.fill(2), Some(Fill::Gradient(_))));
         assert_eq!(t.formats.line(2).and_then(|l| l.width), Some(12_700));
         assert!(t.formats.effect(1).map(|e| e.is_empty()).unwrap_or(false));
-        assert!(t.formats.effect(2).map(|e| e.outer_shadow.is_some()).unwrap_or(false));
-        assert!(matches!(t.formats.background_fill(1001), Some(Fill::Solid(_))));
+        assert!(t
+            .formats
+            .effect(2)
+            .map(|e| e.outer_shadow.is_some())
+            .unwrap_or(false));
+        assert!(matches!(
+            t.formats.background_fill(1001),
+            Some(Fill::Solid(_))
+        ));
     }
 
     #[test]

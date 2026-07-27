@@ -153,10 +153,7 @@ pub fn apply_mods(base: Color, mods: &[ColorMod]) -> Color {
 
 fn apply_mod(c: Color, m: ColorMod) -> Color {
     match m {
-        ColorMod::Alpha(a) => Color {
-            a: to_u8(a),
-            ..c
-        },
+        ColorMod::Alpha(a) => Color { a: to_u8(a), ..c },
         ColorMod::AlphaMod(f) => c.with_alpha_factor(f),
         ColorMod::AlphaOff(o) => Color {
             a: to_u8(c.a as f32 / 255.0 + o),
@@ -276,7 +273,11 @@ pub fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Color {
         let v = to_u8(l);
         return Color::rgb(v, v, v);
     }
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let hk = h.rem_euclid(360.0) / 360.0;
     let f = |mut t: f32| {
@@ -352,7 +353,10 @@ mod tests {
     #[test]
     fn scheme_names_round_trip() {
         assert_eq!(SchemeColor::parse("accent3"), Some(SchemeColor::Accent3));
-        assert_eq!(SchemeColor::parse("folHlink"), Some(SchemeColor::FollowedHyperlink));
+        assert_eq!(
+            SchemeColor::parse("folHlink"),
+            Some(SchemeColor::FollowedHyperlink)
+        );
         assert_eq!(SchemeColor::parse("bogus"), None);
     }
 
@@ -433,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn the_common_accent1_lumMod_lumOff_pair_lightens() {
+    fn the_common_accent1_luminance_pair_lightens() {
         // The exact stack PowerPoint writes for "Accent 1, Lighter 40%".
         let r = ColorRef {
             spec: ColorSpec::Scheme(SchemeColor::Accent1),
@@ -449,7 +453,10 @@ mod tests {
 
     #[test]
     fn alpha_modifiers_compose_in_document_order() {
-        let c = apply_mods(Color::rgb(1, 2, 3), &[ColorMod::Alpha(0.5), ColorMod::AlphaMod(0.5)]);
+        let c = apply_mods(
+            Color::rgb(1, 2, 3),
+            &[ColorMod::Alpha(0.5), ColorMod::AlphaMod(0.5)],
+        );
         assert_eq!(c.a, 64);
     }
 

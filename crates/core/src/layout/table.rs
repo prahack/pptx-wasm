@@ -123,10 +123,30 @@ fn cell_edges(cell: &TableCell, style: &PartStyle, pos: CellPosition) -> CellEdg
         }
     };
     CellEdges {
-        left: pick(&cell.border_left, &style.left, &style.inside_v, pos.is_first_col()),
-        right: pick(&cell.border_right, &style.right, &style.inside_v, pos.is_last_col()),
-        top: pick(&cell.border_top, &style.top, &style.inside_h, pos.is_first_row()),
-        bottom: pick(&cell.border_bottom, &style.bottom, &style.inside_h, pos.is_last_row()),
+        left: pick(
+            &cell.border_left,
+            &style.left,
+            &style.inside_v,
+            pos.is_first_col(),
+        ),
+        right: pick(
+            &cell.border_right,
+            &style.right,
+            &style.inside_v,
+            pos.is_last_col(),
+        ),
+        top: pick(
+            &cell.border_top,
+            &style.top,
+            &style.inside_h,
+            pos.is_first_row(),
+        ),
+        bottom: pick(
+            &cell.border_bottom,
+            &style.bottom,
+            &style.inside_h,
+            pos.is_last_row(),
+        ),
         tl_br: cell.border_tl_br.clone(),
         tr_bl: cell.border_tr_bl.clone(),
     }
@@ -222,13 +242,7 @@ fn column_width(edges: &[f32], start: usize, span: usize) -> f32 {
 }
 
 /// The rectangle a cell occupies, or `None` if it is covered by a merge.
-fn cell_rect(
-    table: &Table,
-    cols: &[f32],
-    rows: &[f32],
-    r: usize,
-    c: usize,
-) -> Option<Rect> {
+fn cell_rect(table: &Table, cols: &[f32], rows: &[f32], r: usize, c: usize) -> Option<Rect> {
     let (col, row, col_span, row_span) = table.cell_span(r, c)?;
     let x0 = cols.get(col).copied()?;
     let x1 = cols
@@ -335,10 +349,7 @@ fn cell_paragraphs(
             });
         }
 
-        let size = fragments
-            .first()
-            .map(|f| f.font.size())
-            .unwrap_or(18.0);
+        let size = fragments.first().map(|f| f.font.size()).unwrap_or(18.0);
         out.push(StyledParagraph {
             fragments,
             align: props.align.unwrap_or(TextAlign::Left),
@@ -377,9 +388,21 @@ fn emit_cell_borders(
         out.push(Command::StrokePath { path: p, stroke });
     };
     edge(&edges.top, rect.x, rect.y, rect.right(), rect.y);
-    edge(&edges.bottom, rect.x, rect.bottom(), rect.right(), rect.bottom());
+    edge(
+        &edges.bottom,
+        rect.x,
+        rect.bottom(),
+        rect.right(),
+        rect.bottom(),
+    );
     edge(&edges.left, rect.x, rect.y, rect.x, rect.bottom());
-    edge(&edges.right, rect.right(), rect.y, rect.right(), rect.bottom());
+    edge(
+        &edges.right,
+        rect.right(),
+        rect.y,
+        rect.right(),
+        rect.bottom(),
+    );
     edge(&edges.tl_br, rect.x, rect.y, rect.right(), rect.bottom());
     edge(&edges.tr_bl, rect.right(), rect.y, rect.x, rect.bottom());
 }
@@ -408,7 +431,10 @@ mod tests {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
             let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
             w.start_file("[Content_Types].xml", opts).expect("s");
-            w.write_all(br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#).expect("w");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("w");
             w.finish().expect("f");
         }
         let pkg = crate::opc::Package::open(buf).expect("open");
@@ -424,14 +450,16 @@ mod tests {
     }
 
     fn text_cell(s: &str) -> TableCell {
-        let mut body = TextBody::default();
-        body.paragraphs = vec![crate::model::Paragraph {
-            runs: vec![crate::model::Run::Text {
-                text: s.to_string(),
-                props: Default::default(),
+        let body = TextBody {
+            paragraphs: vec![crate::model::Paragraph {
+                runs: vec![crate::model::Run::Text {
+                    text: s.to_string(),
+                    props: Default::default(),
+                }],
+                ..Default::default()
             }],
             ..Default::default()
-        }];
+        };
         TableCell {
             text: Some(body),
             grid_span: 1,
@@ -541,7 +569,10 @@ mod tests {
             &crate::model::table_style::TableStyle::plain_grid(),
         );
         let merged = cell_rect(&t, &cols, &rows, 0, 1).expect("merged cell");
-        assert!(merged.h > 30.0, "merged cell should span both rows: {merged:?}");
+        assert!(
+            merged.h > 30.0,
+            "merged cell should span both rows: {merged:?}"
+        );
         assert!(cell_rect(&t, &cols, &rows, 1, 1).is_none());
     }
 
@@ -563,7 +594,8 @@ mod tests {
             &StubMeasure,
             &crate::model::table_style::TableStyle::plain_grid(),
         );
-        let first_row_height = rows.get(1).copied().unwrap_or(0.0) - rows.first().copied().unwrap_or(0.0);
+        let first_row_height =
+            rows.get(1).copied().unwrap_or(0.0) - rows.first().copied().unwrap_or(0.0);
         assert!(
             first_row_height > 20.0,
             "row should grow past its authored 20pt, got {first_row_height}"
@@ -594,7 +626,10 @@ mod tests {
             })
             .collect();
         assert_eq!(fills, vec![Paint::Solid(crate::dl::Color::rgb(1, 2, 3))]);
-        let strokes = cmds.iter().filter(|c| matches!(c, Command::StrokePath { .. })).count();
+        let strokes = cmds
+            .iter()
+            .filter(|c| matches!(c, Command::StrokePath { .. }))
+            .count();
         assert_eq!(strokes, 16, "four edges on each of four cells");
     }
 
@@ -618,7 +653,10 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(widths.contains(&4.0), "expected the 4pt override, got {widths:?}");
+        assert!(
+            widths.contains(&4.0),
+            "expected the 4pt override, got {widths:?}"
+        );
     }
 
     #[test]
@@ -650,7 +688,10 @@ mod tests {
             _ => None,
         });
         let run = header_text.expect("header text");
-        assert!(run.font.to_css().contains("700"), "header text should be bold");
+        assert!(
+            run.font.to_css().contains("700"),
+            "header text should be bold"
+        );
         assert_eq!(
             run.paint,
             Paint::Solid(crate::dl::Color::WHITE),
@@ -680,7 +721,10 @@ mod tests {
             .iter()
             .position(|c| matches!(c, Command::StrokePath { .. }))
             .unwrap_or(usize::MAX);
-        assert!(first_stroke > last_fill, "all fills must precede all borders");
+        assert!(
+            first_stroke > last_fill,
+            "all fills must precede all borders"
+        );
     }
 
     #[test]

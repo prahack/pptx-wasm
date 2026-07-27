@@ -47,7 +47,9 @@ impl Color {
     /// Multiplies the existing alpha by `factor` (0..=1). OOXML alpha modulation is
     /// multiplicative, so stacked `<a:alpha>` elements compose correctly.
     pub fn with_alpha_factor(self, factor: f32) -> Self {
-        let a = (self.a as f32 * factor.clamp(0.0, 1.0)).round().clamp(0.0, 255.0);
+        let a = (self.a as f32 * factor.clamp(0.0, 1.0))
+            .round()
+            .clamp(0.0, 255.0);
         Color { a: a as u8, ..self }
     }
 
@@ -212,13 +214,17 @@ mod tests {
 
     #[test]
     fn alpha_factors_compose_multiplicatively() {
-        let c = Color::rgb(10, 20, 30).with_alpha_factor(0.5).with_alpha_factor(0.5);
+        let c = Color::rgb(10, 20, 30)
+            .with_alpha_factor(0.5)
+            .with_alpha_factor(0.5);
         assert_eq!(c.a, 64); // 255 * 0.5 = 128 (rounded), * 0.5 = 64
     }
 
     #[test]
     fn css_output_drops_the_alpha_channel_when_opaque() {
         assert_eq!(Color::rgb(255, 128, 0).to_css(), "#ff8000");
-        assert!(Color::rgba(255, 128, 0, 128).to_css().starts_with("rgba(255,128,0,"));
+        assert!(Color::rgba(255, 128, 0, 128)
+            .to_css()
+            .starts_with("rgba(255,128,0,"));
     }
 }

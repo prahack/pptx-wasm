@@ -272,7 +272,11 @@ mod tests {
             font: FontSpec::new(family, 12.0),
             origin: Point::new(0.0, 0.0),
             paint: Paint::Solid(Color::BLACK),
-            advances: if with_advances { vec![6.0; n] } else { Vec::new() },
+            advances: if with_advances {
+                vec![6.0; n]
+            } else {
+                Vec::new()
+            },
             width: 6.0 * n as f32,
             decorations: Default::default(),
             letter_spacing: 0.0,
@@ -369,7 +373,11 @@ mod tests {
         dl.push(text("hello", "Arial", false));
         let r = Requirements::analyse(&dl);
         assert!(!r.is_renderable());
-        assert!(r.unsupported.first().map(|s| s.contains("advances")).unwrap_or(false));
+        assert!(r
+            .unsupported
+            .first()
+            .map(|s| s.contains("advances"))
+            .unwrap_or(false));
     }
 
     #[test]
@@ -395,6 +403,8 @@ mod tests {
         dl.push(text("x", "Arial", false));
         assert!(Requirements::analyse(&dl).summary().contains("UNSUPPORTED"));
         let empty = DisplayList::new(10.0, 10.0);
-        assert!(!Requirements::analyse(&empty).summary().contains("UNSUPPORTED"));
+        assert!(!Requirements::analyse(&empty)
+            .summary()
+            .contains("UNSUPPORTED"));
     }
 }

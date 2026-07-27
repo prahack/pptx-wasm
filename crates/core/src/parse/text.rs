@@ -47,7 +47,9 @@ pub fn parse_text_body(r: &mut Reader<'_>, container: &[u8]) -> TextBody {
 
 pub fn parse_body_props(r: &mut Reader<'_>, e: &BytesStart<'_>, empty: bool) -> BodyProps {
     let mut bp = BodyProps {
-        anchor: attr(e, b"anchor").as_deref().and_then(VerticalAnchor::parse),
+        anchor: attr(e, b"anchor")
+            .as_deref()
+            .and_then(VerticalAnchor::parse),
         anchor_center: attr_bool(e, b"anchorCtr"),
         left_inset: attr_i64(e, b"lIns"),
         top_inset: attr_i64(e, b"tIns"),
@@ -490,7 +492,11 @@ mod tests {
                  <a:t>styled</a:t>
                </a:r></a:p></p:txBody>"#,
         );
-        let run = b.paragraphs.first().and_then(|p| p.runs.first()).expect("run");
+        let run = b
+            .paragraphs
+            .first()
+            .and_then(|p| p.runs.first())
+            .expect("run");
         let rp = run.props();
         assert_eq!(rp.size, Some(2400));
         assert_eq!(rp.size_points(), Some(24.0));
@@ -534,7 +540,10 @@ mod tests {
             Some(BulletKind::None)
         );
         let without = body(r#"<p:txBody><a:p><a:pPr/></a:p></p:txBody>"#);
-        assert_eq!(without.paragraphs.first().expect("p").props.bullet.kind, None);
+        assert_eq!(
+            without.paragraphs.first().expect("p").props.bullet.kind,
+            None
+        );
     }
 
     #[test]

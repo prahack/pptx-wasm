@@ -129,12 +129,7 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
     fn apply_transform(&self, t: &Transform) -> Result<(), Error> {
         self.ctx
             .set_transform(
-                t.a as f64,
-                t.b as f64,
-                t.c as f64,
-                t.d as f64,
-                t.e as f64,
-                t.f as f64,
+                t.a as f64, t.b as f64, t.c as f64, t.d as f64, t.e as f64, t.f as f64,
             )
             .map_err(Error::from)
     }
@@ -269,7 +264,8 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
             };
             let b = path.bounds();
             self.ctx.save();
-            self.ctx.clip_with_path_2d_and_winding(&p2d, Self::winding(rule));
+            self.ctx
+                .clip_with_path_2d_and_winding(&p2d, Self::winding(rule));
             let prev = self.ctx.global_alpha();
             self.ctx.set_global_alpha((*opacity).clamp(0.0, 1.0) as f64);
             self.draw_image(&handle, *src, b)?;
@@ -279,7 +275,8 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
         }
         let style = self.paint_style(paint)?;
         self.set_fill(&style)?;
-        self.ctx.fill_with_path_2d_and_winding(&p2d, Self::winding(rule));
+        self.ctx
+            .fill_with_path_2d_and_winding(&p2d, Self::winding(rule));
         Ok(())
     }
 
@@ -359,12 +356,28 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
             CanvasImage::Element(e) => self
                 .ctx
                 .draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                    e, sx, sy, sw, sh, dst.x as f64, dst.y as f64, dst.w as f64, dst.h as f64,
+                    e,
+                    sx,
+                    sy,
+                    sw,
+                    sh,
+                    dst.x as f64,
+                    dst.y as f64,
+                    dst.w as f64,
+                    dst.h as f64,
                 ),
             CanvasImage::Bitmap(b) => self
                 .ctx
                 .draw_image_with_image_bitmap_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                    b, sx, sy, sw, sh, dst.x as f64, dst.y as f64, dst.w as f64, dst.h as f64,
+                    b,
+                    sx,
+                    sy,
+                    sw,
+                    sh,
+                    dst.x as f64,
+                    dst.y as f64,
+                    dst.w as f64,
+                    dst.h as f64,
                 ),
         };
         result.map_err(Error::from)
@@ -439,7 +452,9 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
         self.current = root;
         self.stack.clear();
         // Clear in device space, before the root transform goes on.
-        self.ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).map_err(Error::from)?;
+        self.ctx
+            .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            .map_err(Error::from)?;
         self.ctx.set_global_alpha(1.0);
         self.set_shadow(None);
         if self.pixel_size.0 > 0.0 && self.pixel_size.1 > 0.0 {
@@ -478,7 +493,8 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
             }
             Command::ClipPath { path, rule } => {
                 let p = self.build_path(path)?;
-                self.ctx.clip_with_path_2d_and_winding(&p, Self::winding(*rule));
+                self.ctx
+                    .clip_with_path_2d_and_winding(&p, Self::winding(*rule));
             }
             Command::SetShadow(shadow) => self.set_shadow(shadow.as_ref()),
             Command::FillPath { path, paint, rule } => self.fill(path, paint, *rule)?,
@@ -508,7 +524,9 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
         while self.stack.pop().is_some() {
             self.ctx.restore();
         }
-        self.ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).map_err(Error::from)?;
+        self.ctx
+            .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            .map_err(Error::from)?;
         Ok(())
     }
 }

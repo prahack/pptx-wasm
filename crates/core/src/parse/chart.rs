@@ -397,7 +397,10 @@ fn parse_series_name(r: &mut Reader<'_>) -> String {
     children(r, b"tx", |r, e, empty| {
         match local_name(e.name().as_ref()) {
             b"strRef" if !empty => {
-                name = parse_string_cache(r, b"strRef").into_iter().next().unwrap_or_default();
+                name = parse_string_cache(r, b"strRef")
+                    .into_iter()
+                    .next()
+                    .unwrap_or_default();
                 true
             }
             b"v" if !empty => {
@@ -465,7 +468,13 @@ fn parse_string_cache(r: &mut Reader<'_>, container: &[u8]) -> Vec<String> {
     collect_points(r, container, &mut count, &mut |idx, value| {
         points.push((idx, value.to_string()));
     });
-    let len = count.max(points.iter().map(|(i, _)| *i as usize + 1).max().unwrap_or(0));
+    let len = count.max(
+        points
+            .iter()
+            .map(|(i, _)| *i as usize + 1)
+            .max()
+            .unwrap_or(0),
+    );
     let mut out = vec![String::new(); len];
     for (idx, value) in points {
         if let Some(slot) = out.get_mut(idx as usize) {
@@ -480,9 +489,18 @@ fn parse_number_cache(r: &mut Reader<'_>, container: &[u8]) -> Vec<Option<f64>> 
     let mut count = 0usize;
     collect_points(r, container, &mut count, &mut |idx, value| {
         // A non-numeric cache entry is a gap, not a zero.
-        points.push((idx, value.trim().parse::<f64>().ok().filter(|v| v.is_finite())));
+        points.push((
+            idx,
+            value.trim().parse::<f64>().ok().filter(|v| v.is_finite()),
+        ));
     });
-    let len = count.max(points.iter().map(|(i, _)| *i as usize + 1).max().unwrap_or(0));
+    let len = count.max(
+        points
+            .iter()
+            .map(|(i, _)| *i as usize + 1)
+            .max()
+            .unwrap_or(0),
+    );
     let mut out = vec![None; len];
     for (idx, value) in points {
         if let Some(slot) = out.get_mut(idx as usize) {
@@ -630,7 +648,12 @@ fn parse_axis(r: &mut Reader<'_>, container: &[u8], kind: AxisKind) -> Axis {
 pub fn is_supported_plot(name: &BytesStart<'_>) -> bool {
     matches!(
         local_name(name.name().as_ref()),
-        b"barChart" | b"lineChart" | b"pieChart" | b"doughnutChart" | b"areaChart" | b"scatterChart"
+        b"barChart"
+            | b"lineChart"
+            | b"pieChart"
+            | b"doughnutChart"
+            | b"areaChart"
+            | b"scatterChart"
     )
 }
 
@@ -710,7 +733,10 @@ mod tests {
         assert_eq!(plot.gap_width, 219.0);
         assert_eq!(plot.overlap, -27.0);
         assert_eq!(chart.axes.len(), 2);
-        assert_eq!(chart.legend.map(|l| l.position), Some(LegendPosition::Bottom));
+        assert_eq!(
+            chart.legend.map(|l| l.position),
+            Some(LegendPosition::Bottom)
+        );
     }
 
     #[test]
@@ -718,7 +744,11 @@ mod tests {
         let chart = parse_chart(BAR);
         let plot = chart.plots.first().expect("plot");
         let names: Vec<_> = plot.series.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["2024", "2023"], "c:order must win over document order");
+        assert_eq!(
+            names,
+            vec!["2024", "2023"],
+            "c:order must win over document order"
+        );
     }
 
     #[test]
@@ -734,7 +764,11 @@ mod tests {
     #[test]
     fn axis_scaling_and_gridlines_are_read() {
         let chart = parse_chart(BAR);
-        let value = chart.axes.iter().find(|a| a.kind == AxisKind::Value).expect("value axis");
+        let value = chart
+            .axes
+            .iter()
+            .find(|a| a.kind == AxisKind::Value)
+            .expect("value axis");
         assert_eq!(value.min, Some(0.0));
         assert_eq!(value.max, Some(2000.0));
         assert!(value.major_gridlines);
@@ -771,7 +805,10 @@ mod tests {
         assert!(plot.vary_colors);
         let s = plot.series.first().expect("series");
         assert_eq!(s.point_fills.len(), 2);
-        assert!(matches!(s.fill_for_point(0), crate::model::fill::Fill::Solid(_)));
+        assert!(matches!(
+            s.fill_for_point(0),
+            crate::model::fill::Fill::Solid(_)
+        ));
     }
 
     #[test]
@@ -784,7 +821,11 @@ mod tests {
             </c:ser>
         </c:lineChart></c:plotArea></c:chart></c:chartSpace>"##;
         let chart = parse_chart(xml);
-        let s = chart.plots.first().and_then(|p| p.series.first()).expect("series");
+        let s = chart
+            .plots
+            .first()
+            .and_then(|p| p.series.first())
+            .expect("series");
         assert!(s.smooth);
         assert!(!s.marker);
     }
@@ -798,7 +839,11 @@ mod tests {
             </c:ser>
         </c:barChart></c:plotArea></c:chart></c:chartSpace>"##;
         let chart = parse_chart(xml);
-        let s = chart.plots.first().and_then(|p| p.series.first()).expect("series");
+        let s = chart
+            .plots
+            .first()
+            .and_then(|p| p.series.first())
+            .expect("series");
         assert_eq!(s.categories, vec!["2023", "2024"]);
     }
 
@@ -811,12 +856,30 @@ mod tests {
     #[allow(dead_code)]
     #[test]
     fn axis_values_are_formatted_by_their_format_code() {
-        assert_eq!(crate::model::chart::format_axis_value_for(1500.0, Some("#,##0")), "1,500");
-        assert_eq!(crate::model::chart::format_axis_value_for(-1234567.0, Some("#,##0")), "-1,234,567");
-        assert_eq!(crate::model::chart::format_axis_value_for(0.255, Some("0%")), "25.5%");
-        assert_eq!(crate::model::chart::format_axis_value_for(0.25, Some("0%")), "25%");
-        assert_eq!(crate::model::chart::format_axis_value_for(3.14159, Some("0.00")), "3.14");
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(1500.0, Some("#,##0")),
+            "1,500"
+        );
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(-1234567.0, Some("#,##0")),
+            "-1,234,567"
+        );
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(0.255, Some("0%")),
+            "25.5%"
+        );
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(0.25, Some("0%")),
+            "25%"
+        );
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(std::f64::consts::PI, Some("0.00")),
+            "3.14"
+        );
         assert_eq!(crate::model::chart::format_axis_value_for(42.0, None), "42");
-        assert_eq!(crate::model::chart::format_axis_value_for(42.5, None), "42.5");
+        assert_eq!(
+            crate::model::chart::format_axis_value_for(42.5, None),
+            "42.5"
+        );
     }
 }

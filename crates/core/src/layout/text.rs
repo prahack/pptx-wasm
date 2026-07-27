@@ -112,13 +112,19 @@ pub fn layout(
         Autofit::Shrink {
             font_scale,
             line_space_reduction,
-        } => (font_scale.clamp(0.05, 1.0), line_space_reduction.clamp(0.0, 0.9)),
+        } => (
+            font_scale.clamp(0.05, 1.0),
+            line_space_reduction.clamp(0.0, 0.9),
+        ),
         _ => (1.0, 0.0),
     };
 
     // Apply PowerPoint's own pre-computed autofit shrink rather than re-deriving it.
     let scaled: Vec<StyledParagraph> = if font_scale < 1.0 {
-        paragraphs.iter().map(|p| scale_paragraph(p, font_scale)).collect()
+        paragraphs
+            .iter()
+            .map(|p| scale_paragraph(p, font_scale))
+            .collect()
     } else {
         paragraphs.to_vec()
     };
@@ -154,14 +160,18 @@ pub fn layout(
         VerticalAnchor::Bottom => content.y + slack,
     };
     let extra_per_gap = match anchor {
-        VerticalAnchor::Justified | VerticalAnchor::Distributed if blocks.len() > 1 && slack > 0.0 => {
+        VerticalAnchor::Justified | VerticalAnchor::Distributed
+            if blocks.len() > 1 && slack > 0.0 =>
+        {
             slack / (blocks.len() - 1) as f32
         }
         _ => 0.0,
     };
 
     for (n, (idx, lines)) in blocks.iter().enumerate() {
-        let Some(para) = scaled.get(*idx) else { continue };
+        let Some(para) = scaled.get(*idx) else {
+            continue;
+        };
         y += spacing_to_points(para.space_before, para_font_size(para));
         emit_paragraph(para, lines, content, &mut y, line_reduction, measure, out);
         y += spacing_to_points(para.space_after, para_font_size(para));
@@ -216,7 +226,11 @@ fn wrap_paragraph(
     let mut is_first = true;
 
     let line_limit = |first: bool| {
-        let indent = if first { first_indent + bullet_width } else { 0.0 };
+        let indent = if first {
+            first_indent + bullet_width
+        } else {
+            0.0
+        };
         (avail - indent).max(1.0)
     };
 
@@ -285,7 +299,8 @@ fn wrap_paragraph(
             let word_w = advance(word_start, word_end);
             let limit = line_limit(is_first);
 
-            if current_width + advance(piece_start, word_end) > limit && (current_width > 0.0 || word_start > piece_start)
+            if current_width + advance(piece_start, word_end) > limit
+                && (current_width > 0.0 || word_start > piece_start)
             {
                 // Commit what fits, then start a new line at this word.
                 if word_start > piece_start {
@@ -390,7 +405,12 @@ fn is_break_opportunity(c: Option<char>) -> bool {
     matches!(c, Some(' ') | Some('\t') | Some('\u{00A0}') | None)
 }
 
-fn line_height(line: &Line, para: &StyledParagraph, reduction: f32, measure: &dyn TextMeasure) -> f32 {
+fn line_height(
+    line: &Line,
+    para: &StyledParagraph,
+    reduction: f32,
+    measure: &dyn TextMeasure,
+) -> f32 {
     let natural = line.ascent + line.descent;
     let base = match para.line_spacing {
         // A percentage multiplies the font's own line height. PowerPoint applies the
@@ -428,7 +448,8 @@ fn paragraph_height(
     measure: &dyn TextMeasure,
 ) -> f32 {
     let size = para_font_size(para);
-    let mut h = spacing_to_points(para.space_before, size) + spacing_to_points(para.space_after, size);
+    let mut h =
+        spacing_to_points(para.space_before, size) + spacing_to_points(para.space_after, size);
     for l in lines {
         h += line_height(l, para, reduction, measure);
     }
@@ -474,17 +495,24 @@ fn emit_paragraph(
         };
         let indent = if line.is_first { para.indent } else { 0.0 };
         let line_left = content.x + para.margin_left + indent.max(-para.margin_left);
-        let avail = (content.w - para.margin_left - para.margin_right
-            - if line.is_first { indent.max(-para.margin_left) } else { 0.0 })
-            .max(0.0);
+        let avail = (content.w
+            - para.margin_left
+            - para.margin_right
+            - if line.is_first {
+                indent.max(-para.margin_left)
+            } else {
+                0.0
+            })
+        .max(0.0);
 
         // Justification stretches the inter-word gaps rather than the glyphs.
-        let justify = matches!(para.align, TextAlign::Justify)
-            && !line.is_last
+        let justify = matches!(para.align, TextAlign::Justify) && !line.is_last
             || para.align.justifies_last_line();
         let slack = (avail - bullet_width - line.width).max(0.0);
         let mut x = match para.align {
-            TextAlign::Left | TextAlign::Justify | TextAlign::Distributed
+            TextAlign::Left
+            | TextAlign::Justify
+            | TextAlign::Distributed
             | TextAlign::ThaiDistributed => line_left,
             TextAlign::Center => line_left + slack / 2.0,
             TextAlign::Right => line_left + slack,
@@ -543,7 +571,7 @@ fn emit_paragraph(
                 advances: measured.advances,
                 width: piece.width,
                 decorations: frag.decorations,
-                letter_spacing: frag.letter_spacing + if spaces > 0 { 0.0 } else { 0.0 },
+                letter_spacing: frag.letter_spacing,
             }));
             x += piece.width + extra_per_gap * spaces as f32;
         }
@@ -860,8 +888,14 @@ mod tests {
         let right = make(TextAlign::Right);
         assert!(left < center && center < right, "{left} {center} {right}");
         assert!((left - 0.0).abs() < 0.01);
-        let w = StubMeasure.measure(text, &FontSpec::new("Arial", 12.0)).width;
-        assert!((right - (200.0 - w)).abs() < 0.5, "right={right} expected {}", 200.0 - w);
+        let w = StubMeasure
+            .measure(text, &FontSpec::new("Arial", 12.0))
+            .width;
+        assert!(
+            (right - (200.0 - w)).abs() < 0.5,
+            "right={right} expected {}",
+            200.0 - w
+        );
     }
 
     #[test]
@@ -920,11 +954,23 @@ mod tests {
         a.space_after = Spacing::Points(0.0);
         b.space_before = Spacing::Points(0.0);
         let mut tight = Vec::new();
-        layout(&[a.clone(), b.clone()], &BodyProps::default(), Rect::new(0.0, 0.0, 300.0, 300.0), &StubMeasure, &mut tight);
+        layout(
+            &[a.clone(), b.clone()],
+            &BodyProps::default(),
+            Rect::new(0.0, 0.0, 300.0, 300.0),
+            &StubMeasure,
+            &mut tight,
+        );
 
         b.space_before = Spacing::Points(24.0);
         let mut loose = Vec::new();
-        layout(&[a, b], &BodyProps::default(), Rect::new(0.0, 0.0, 300.0, 300.0), &StubMeasure, &mut loose);
+        layout(
+            &[a, b],
+            &BodyProps::default(),
+            Rect::new(0.0, 0.0, 300.0, 300.0),
+            &StubMeasure,
+            &mut loose,
+        );
 
         let gap = |cmds: &[Command]| {
             let o = run_origins(cmds);
@@ -991,7 +1037,11 @@ mod tests {
             &mut out,
         );
         assert!(result.overflowed);
-        assert_eq!(run_texts(&out).len(), 20, "overflowing text is still emitted");
+        assert_eq!(
+            run_texts(&out).len(),
+            20,
+            "overflowing text is still emitted"
+        );
     }
 
     #[test]
@@ -1029,10 +1079,7 @@ mod tests {
 
     #[test]
     fn content_rect_applies_the_body_insets() {
-        let r = content_rect(
-            Rect::new(10.0, 20.0, 200.0, 100.0),
-            &BodyProps::default(),
-        );
+        let r = content_rect(Rect::new(10.0, 20.0, 200.0, 100.0), &BodyProps::default());
         // 91440 EMU = 7.2pt, 45720 EMU = 3.6pt
         assert!((r.x - 17.2).abs() < 0.01);
         assert!((r.y - 23.6).abs() < 0.01);
@@ -1041,10 +1088,7 @@ mod tests {
 
     #[test]
     fn insets_larger_than_the_box_clamp_to_an_empty_content_rect() {
-        let r = content_rect(
-            Rect::new(0.0, 0.0, 5.0, 5.0),
-            &BodyProps::default(),
-        );
+        let r = content_rect(Rect::new(0.0, 0.0, 5.0, 5.0), &BodyProps::default());
         assert!(r.w >= 0.0 && r.h >= 0.0);
     }
 

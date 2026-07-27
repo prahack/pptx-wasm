@@ -216,7 +216,15 @@ impl Path {
         self
     }
 
-    pub fn cubic_to(&mut self, c1x: f32, c1y: f32, c2x: f32, c2y: f32, x: f32, y: f32) -> &mut Self {
+    pub fn cubic_to(
+        &mut self,
+        c1x: f32,
+        c1y: f32,
+        c2x: f32,
+        c2y: f32,
+        x: f32,
+        y: f32,
+    ) -> &mut Self {
         self.verbs.push(PathVerb::CubicTo);
         self.points.push(Point::new(c1x, c1y));
         self.points.push(Point::new(c2x, c2y));
@@ -241,7 +249,7 @@ impl Path {
 
     /// An ellipse inscribed in `r`, as four cubic segments.
     pub fn ellipse(r: Rect) -> Self {
-        const K: f32 = 0.552_284_75; // 4/3·(√2−1): circle-to-cubic magic number
+        const K: f32 = 0.552_284_7; // 4/3·(√2−1): circle-to-cubic magic number
         let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
         let (rx, ry) = (r.w / 2.0, r.h / 2.0);
         let (ox, oy) = (rx * K, ry * K);

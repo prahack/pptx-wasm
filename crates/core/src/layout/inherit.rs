@@ -106,7 +106,10 @@ impl<'a> Resolver<'a> {
         let style = style?;
         let idx = style.fill_idx?;
         let fill = self.chain.theme.formats.fill(idx)?.clone();
-        Some(substitute_placeholder_color(fill, style.fill_color.as_ref()))
+        Some(substitute_placeholder_color(
+            fill,
+            style.fill_color.as_ref(),
+        ))
     }
 
     /// The effective outline, merged across the chain so a shape can override only its
@@ -403,8 +406,10 @@ mod tests {
             let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
             let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
             w.start_file("[Content_Types].xml", opts).expect("start");
-            w.write_all(br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#)
-                .expect("write");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("write");
             w.finish().expect("finish");
         }
         let pkg = crate::opc::Package::open(buf).expect("open");
@@ -495,7 +500,12 @@ mod tests {
             },
             ..Default::default()
         };
-        let f = fixture(Slide::default(), layout, SlideMaster::default(), Theme::default());
+        let f = fixture(
+            Slide::default(),
+            layout,
+            SlideMaster::default(),
+            Theme::default(),
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         let ancestors = r.placeholder_ancestors(&shape);
         assert_eq!(r.transform(&shape, &ancestors).offset_x, 1);
@@ -530,7 +540,12 @@ mod tests {
             },
             ..Default::default()
         };
-        let f = fixture(Slide::default(), layout, SlideMaster::default(), Theme::default());
+        let f = fixture(
+            Slide::default(),
+            layout,
+            SlideMaster::default(),
+            Theme::default(),
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         let ancestors = r.placeholder_ancestors(&shape);
         let t = r.transform(&shape, &ancestors);
@@ -564,7 +579,11 @@ mod tests {
         match r.fill(&shape, &[]) {
             Fill::Solid(c) => {
                 assert_eq!(c.spec, ColorSpec::Scheme(SchemeColor::Accent2));
-                assert_eq!(c.mods, vec![ColorMod::Shade(0.5)], "the style's own modifier survives");
+                assert_eq!(
+                    c.mods,
+                    vec![ColorMod::Shade(0.5)],
+                    "the style's own modifier survives"
+                );
             }
             other => panic!("expected a solid fill, got {other:?}"),
         }
@@ -582,7 +601,12 @@ mod tests {
             }),
             ..Default::default()
         };
-        let f = fixture(Slide::default(), SlideLayout::default(), SlideMaster::default(), theme);
+        let f = fixture(
+            Slide::default(),
+            SlideLayout::default(),
+            SlideMaster::default(),
+            theme,
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         match r.fill(&shape, &[]) {
             Fill::Solid(c) => assert_eq!(c.spec, ColorSpec::Srgb(Color::rgb(1, 2, 3))),
@@ -608,7 +632,12 @@ mod tests {
             },
             ..Default::default()
         };
-        let f = fixture(Slide::default(), layout, SlideMaster::default(), Theme::default());
+        let f = fixture(
+            Slide::default(),
+            layout,
+            SlideMaster::default(),
+            Theme::default(),
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         let ancestors = r.placeholder_ancestors(&shape);
         assert_eq!(r.fill(&shape, &ancestors), Fill::NoFill);
@@ -630,7 +659,12 @@ mod tests {
             text: Some(TextBody::default()),
             ..Default::default()
         };
-        let f = fixture(Slide::default(), SlideLayout::default(), master, Theme::default());
+        let f = fixture(
+            Slide::default(),
+            SlideLayout::default(),
+            master,
+            Theme::default(),
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         let props = r.paragraph_props(&shape, &[], &ParagraphProps::default(), 1);
         assert_eq!(props.align, Some(TextAlign::Right));
@@ -651,7 +685,12 @@ mod tests {
             placeholder: Some(placeholder(PlaceholderType::Body, None)),
             ..Default::default()
         };
-        let f = fixture(Slide::default(), SlideLayout::default(), master, Theme::default());
+        let f = fixture(
+            Slide::default(),
+            SlideLayout::default(),
+            master,
+            Theme::default(),
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         let own = ParagraphProps {
             align: Some(TextAlign::Center),
@@ -685,12 +724,21 @@ mod tests {
         let mut theme = Theme::default();
         theme.fonts.major.latin = "Century Gothic".into();
         theme.fonts.minor.latin = "Verdana".into();
-        let f = fixture(Slide::default(), SlideLayout::default(), SlideMaster::default(), theme);
+        let f = fixture(
+            Slide::default(),
+            SlideLayout::default(),
+            SlideMaster::default(),
+            theme,
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         assert_eq!(r.font_family(Some("+mj-lt")), "Century Gothic");
         assert_eq!(r.font_family(Some("+mn-lt")), "Verdana");
         assert_eq!(r.font_family(Some("Georgia")), "Georgia");
-        assert_eq!(r.font_family(None), "Verdana", "no request means the body font");
+        assert_eq!(
+            r.font_family(None),
+            "Verdana",
+            "no request means the body font"
+        );
     }
 
     #[test]
@@ -698,7 +746,12 @@ mod tests {
         let mut theme = Theme::default();
         theme.fonts.minor.latin = "Verdana".into();
         theme.fonts.major.east_asian = String::new();
-        let f = fixture(Slide::default(), SlideLayout::default(), SlideMaster::default(), theme);
+        let f = fixture(
+            Slide::default(),
+            SlideLayout::default(),
+            SlideMaster::default(),
+            theme,
+        );
         let r = Resolver::new(&f.pres, &f.chain);
         assert_eq!(r.font_family(Some("+mj-ea")), "Verdana");
     }

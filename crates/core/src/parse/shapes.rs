@@ -236,12 +236,10 @@ fn parse_graphic_frame(r: &mut Reader<'_>) -> Shape {
             _ => false,
         }
     });
-    shape.kind = ShapeKind::Graphic(Box::new(content.unwrap_or(
-        GraphicContent::Unsupported {
-            kind: String::new(),
-            fallback_image: None,
-        },
-    )));
+    shape.kind = ShapeKind::Graphic(Box::new(content.unwrap_or(GraphicContent::Unsupported {
+        kind: String::new(),
+        fallback_image: None,
+    })));
     shape
 }
 
@@ -261,10 +259,14 @@ fn parse_graphic(r: &mut Reader<'_>) -> Option<GraphicContent> {
             });
             return true;
         }
-        children(r, b"graphicData", |r, inner, inner_empty| {
-            match local_name(inner.name().as_ref()) {
+        children(
+            r,
+            b"graphicData",
+            |r, inner, inner_empty| match local_name(inner.name().as_ref()) {
                 b"tbl" if !inner_empty => {
-                    out = Some(GraphicContent::Table(Box::new(super::table::parse_table(r))));
+                    out = Some(GraphicContent::Table(Box::new(super::table::parse_table(
+                        r,
+                    ))));
                     true
                 }
                 b"chart" => {
@@ -274,8 +276,8 @@ fn parse_graphic(r: &mut Reader<'_>) -> Option<GraphicContent> {
                     false
                 }
                 _ => false,
-            }
-        });
+            },
+        );
         if out.is_none() {
             out = Some(GraphicContent::Unsupported {
                 kind: uri,
@@ -507,7 +509,11 @@ mod tests {
     #[test]
     fn the_tree_root_group_props_do_not_become_a_shape() {
         let t = tree(RECT);
-        assert_eq!(t.shapes.len(), 1, "the root <p:nvGrpSpPr> must not be a shape");
+        assert_eq!(
+            t.shapes.len(),
+            1,
+            "the root <p:nvGrpSpPr> must not be a shape"
+        );
     }
 
     #[test]
@@ -520,7 +526,11 @@ mod tests {
                  <p:spPr/>
                </p:sp></p:spTree>"#,
         );
-        let ph = t.shapes.first().and_then(|s| s.placeholder.clone()).expect("ph");
+        let ph = t
+            .shapes
+            .first()
+            .and_then(|s| s.placeholder.clone())
+            .expect("ph");
         assert_eq!(ph.kind, PlaceholderType::CenteredTitle);
         assert_eq!(ph.index, Some(4));
     }
@@ -678,7 +688,9 @@ mod tests {
                 }
             }
         }
-        match bg(r#"<p:bg><p:bgPr><a:solidFill><a:srgbClr val="123456"/></a:solidFill></p:bgPr></p:bg>"#) {
+        match bg(
+            r#"<p:bg><p:bgPr><a:solidFill><a:srgbClr val="123456"/></a:solidFill></p:bgPr></p:bg>"#,
+        ) {
             crate::model::shape::Background::Fill(Fill::Solid(_)) => {}
             other => panic!("expected a solid background fill, got {other:?}"),
         }
