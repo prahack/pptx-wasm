@@ -505,6 +505,59 @@ def gen_m5c() -> None:
     save(deck, "m5c-effects")
 
 
+# --------------------------------------------------------------------------- m5d
+
+def gen_m5d() -> None:
+    """A gradient-filled title on a dark background.
+
+    From a real bug: a gradient on *text* was being anchored to a box at the slide origin
+    rather than to the glyphs, so every letter past the first inch sampled the clamped end
+    stop and the whole title rendered one flat colour. Title slides built this way are
+    common enough that it deserves a fixture.
+    """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+
+    deck = new_deck()
+    slide = blank(deck)
+
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = RGBColor(0x10, 0x25, 0x38)
+
+    box = slide.shapes.add_textbox(Inches(1.0), Inches(2.4), Inches(11.3), Inches(2.4))
+    box.text_frame.word_wrap = True
+    p = box.text_frame.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    run = p.add_run()
+    run.text = "FIFA WORLD CUP AWARDS"
+    run.font.size = Pt(54)
+    run.font.bold = True
+
+    # python-pptx has no gradient-on-text API, so the fill is written directly.
+    rPr = run._r.get_or_add_rPr()
+    grad = etree.SubElement(rPr, qn("a:gradFill"))
+    gs_lst = etree.SubElement(grad, qn("a:gsLst"))
+    for pos, colour in [(0, "4EA6DC"), (50000, "F2C744"), (100000, "4EDC94")]:
+        gs = etree.SubElement(gs_lst, qn("a:gs"))
+        gs.set("pos", str(pos))
+        c = etree.SubElement(gs, qn("a:srgbClr"))
+        c.set("val", colour)
+    lin = etree.SubElement(grad, qn("a:lin"))
+    lin.set("ang", "0")
+    lin.set("scaled", "0")
+
+    sub = slide.shapes.add_textbox(Inches(1.0), Inches(4.9), Inches(11.3), Inches(0.8))
+    sp = sub.text_frame.paragraphs[0]
+    sp.alignment = PP_ALIGN.CENTER
+    sr = sp.add_run()
+    sr.text = "Celebrating Individual Excellence"
+    sr.font.size = Pt(24)
+    sr.font.bold = True
+    sr.font.color.rgb = RGBColor(0x9F, 0xAF, 0xBF)
+
+    save(deck, "m5d-gradient-text")
+
+
 # --------------------------------------------------------------------------- m6
 
 def gen_m6() -> None:
@@ -590,6 +643,7 @@ GENERATORS = {
     "m5a": gen_m5a,
     "m5b": gen_m5b,
     "m5c": gen_m5c,
+    "m5d": gen_m5d,
     "m6": gen_m6,
     "bench": gen_bench,
 }

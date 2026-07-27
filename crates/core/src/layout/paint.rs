@@ -107,6 +107,45 @@ pub fn fill_to_paint(
     }
 }
 
+/// Moves a gradient onto `bounds`, keeping its direction and stops.
+///
+/// Text needs this. A run's paint has to be resolved before layout knows where the run
+/// will sit or how wide it is, so a gradient is first computed over a placeholder box and
+/// re-anchored here once the glyphs are placed. Skipping this step is not a subtle error:
+/// the gradient ends up in the slide's top-left corner and every glyph beyond it samples
+/// the clamped final stop, so a gradient title renders as one flat colour.
+///
+/// The direction is recovered from the existing endpoints, which is exact — they were
+/// derived from the angle in the first place.
+pub fn reanchor_gradient(paint: &Paint, bounds: Rect) -> Paint {
+    if bounds.w <= 0.0 || bounds.h <= 0.0 {
+        return paint.clone();
+    }
+    match paint {
+        Paint::Gradient(Gradient::Linear { start, end, stops }) => {
+            let angle = (end.y - start.y).atan2(end.x - start.x);
+            let (new_start, new_end) = linear_endpoints(angle.to_degrees(), bounds);
+            Paint::Gradient(Gradient::Linear {
+                start: new_start,
+                end: new_end,
+                stops: stops.clone(),
+            })
+        }
+        Paint::Gradient(Gradient::Radial { stops, .. }) => Paint::Gradient(Gradient::Radial {
+            center: bounds.center(),
+            radius: (bounds.w.max(bounds.h) / 2.0).max(0.01),
+            scale_y: if bounds.w > 0.0 {
+                (bounds.h / bounds.w).max(0.01)
+            } else {
+                1.0
+            },
+            stops: stops.clone(),
+        }),
+        // Solid paints have no geometry, and an image paint's `src` is normalised.
+        other => other.clone(),
+    }
+}
+
 /// A linear gradient's endpoints for an angle measured clockwise from +x.
 ///
 /// The line runs through the centre of `bounds` and is extended so the gradient covers

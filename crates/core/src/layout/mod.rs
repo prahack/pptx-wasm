@@ -1046,6 +1046,74 @@ mod tests {
         );
     }
 
+    /// A gradient-filled title, which is how a lot of real title slides are built.
+    const GRADIENT_TEXT_SLIDE: &str = r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+        <p:sp>
+          <p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+          <p:spPr><a:xfrm><a:off x="914400" y="1828800"/><a:ext cx="9144000" cy="1828800"/></a:xfrm></p:spPr>
+          <p:txBody>
+            <a:bodyPr/>
+            <a:p><a:r>
+              <a:rPr sz="5400">
+                <a:gradFill>
+                  <a:gsLst>
+                    <a:gs pos="0"><a:srgbClr val="4EA6DC"/></a:gs>
+                    <a:gs pos="50000"><a:srgbClr val="F2C744"/></a:gs>
+                    <a:gs pos="100000"><a:srgbClr val="4EDC94"/></a:gs>
+                  </a:gsLst>
+                  <a:lin ang="0"/>
+                </a:gradFill>
+              </a:rPr>
+              <a:t>FIFA WORLD CUP</a:t>
+            </a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      </p:spTree></p:cSld></p:sld>"#;
+
+    #[test]
+    fn gradient_filled_text_spans_the_text_not_the_slide_origin() {
+        let pres = deck_with_slide(GRADIENT_TEXT_SLIDE);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        let run = dl.text_runs().next().expect("a text run");
+
+        let crate::dl::Paint::Gradient(crate::dl::Gradient::Linear { start, end, stops }) =
+            &run.paint
+        else {
+            panic!("expected a linear gradient on the run, got {:?}", run.paint);
+        };
+        assert_eq!(stops.len(), 3);
+
+        // The gradient has to sweep across the glyphs. Anchored at the slide origin — the
+        // bug this guards — every glyph past ~54pt samples the clamped end colour and the
+        // whole title comes out one flat shade.
+        assert!(
+            (start.x - run.origin.x).abs() < 1.0,
+            "gradient starts at {} but the text starts at {}",
+            start.x,
+            run.origin.x
+        );
+        assert!(
+            (end.x - (run.origin.x + run.width)).abs() < 1.0,
+            "gradient ends at {} but the text ends at {}",
+            end.x,
+            run.origin.x + run.width
+        );
+        assert!(run.width > 100.0, "the run should be wide: {}", run.width);
+    }
+
+    #[test]
+    fn a_solid_text_fill_is_untouched_by_gradient_re_anchoring() {
+        let pres = deck_with_slide(RECT_SLIDE);
+        let dl = layout_slide(&pres, 0, &StubMeasure).expect("layout");
+        for run in dl.text_runs() {
+            assert!(
+                matches!(run.paint, Paint::Solid(_)),
+                "solid text should stay solid, got {:?}",
+                run.paint
+            );
+        }
+    }
+
     #[test]
     fn re_laying_out_the_same_slide_produces_an_identical_display_list() {
         let pres = deck_with_slide(RECT_SLIDE);

@@ -526,11 +526,20 @@ fn emit_paragraph(
                 // The bullet sits at the start of the first line's indent, not inside the
                 // text: with a hanging indent that means to the left of the text body.
                 let bullet_x = content.x + para.margin_left + para.indent.max(-para.margin_left);
+                let bullet_width_pt = measure.measure(&b.text, &b.font).width;
                 out.push(Command::DrawText(TextRun {
                     text: b.text.clone(),
                     font: b.font.clone(),
                     origin: Point::new(bullet_x, baseline),
-                    paint: b.paint.clone(),
+                    paint: super::paint::reanchor_gradient(
+                        &b.paint,
+                        Rect::new(
+                            bullet_x,
+                            baseline - line.ascent,
+                            bullet_width_pt,
+                            line.ascent + line.descent,
+                        ),
+                    ),
                     advances: measure.measure(&b.text, &b.font).advances,
                     width: measure.measure(&b.text, &b.font).width,
                     decorations: Decorations::default(),
@@ -563,11 +572,22 @@ fn emit_paragraph(
             let measured = measure.measure(&text, &frag.font);
             let spaces = text.chars().filter(|c| *c == ' ').count();
             let shift = frag.baseline_shift * frag.font.size();
+            // A gradient is anchored to the glyphs it actually covers. Each line gets its
+            // own sweep, which is what PowerPoint produces for a wrapped gradient title.
+            let paint = super::paint::reanchor_gradient(
+                &frag.paint,
+                Rect::new(
+                    x,
+                    baseline - line.ascent - shift,
+                    piece.width,
+                    line.ascent + line.descent,
+                ),
+            );
             out.push(Command::DrawText(TextRun {
                 text,
                 font: frag.font.clone(),
                 origin: Point::new(x, baseline - shift),
-                paint: frag.paint.clone(),
+                paint,
                 advances: measured.advances,
                 width: piece.width,
                 decorations: frag.decorations,
