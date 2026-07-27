@@ -1,26 +1,39 @@
 /**
  * Side-by-side comparison of pptx renderers.
  *
- * Two jobs. Interactively it puts this viewer next to `pptx-preview` on the same file —
+ * Two jobs. Interactively it puts this viewer next to every other engine on the same file —
  * a bundled fixture or one you drop in — so differences are visible rather than argued
  * about. Headlessly (`?headless=1&engine=…&fixture=…`) it renders exactly one engine and
  * publishes its timings, which is what `tests/golden/compare.mjs` drives.
  *
  * Fairness rules, since a benchmark that flatters its author is worthless:
- *  - both engines get the same bytes, the same slide and the same pixel dimensions;
+ *  - every engine gets the same bytes, the same slide and the same pixel dimensions;
  *  - the clock stops when the engine says it has drawn, not when its promise resolves;
  *  - in the harness each engine is measured in its own page load, so neither warms the
  *    other's caches;
+ *  - no engine is in the entry module graph, so each pays its own module and WASM
+ *    instantiation inside its own cold measurement rather than before the clock;
  *  - an engine that fails is reported as failing, not silently dropped.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { Presentation } from 'pptx-viewer';
-import { init as initPptxPreview } from 'pptx-preview';
+// Every engine — this one included — is imported dynamically from *inside* the timed
+// region, and none is in the entry module graph. Two reasons.
+//
+// Fairness: "cold" is meant to be what a first-time visitor waits for, which includes
+// whatever the engine must do once — instantiate a WASM module, or parse and JIT a JS
+// bundle. Pre-resolving the imports moved the competitors' share of that outside the
+// clock while this project's `initWasm` stayed inside it, and the resulting cold figure
+// flattered us by several milliseconds. A static import here would do the same thing more
+// quietly, which is why there is not one.
+//
+// Isolation: a package that fails to resolve breaks only its own measurement instead of
+// taking the page down with it. pptxviewjs imports an undeclared `chart.js` and did
+// exactly that, hiding every other engine's result behind its failure.
 
-export type EngineId = 'ours' | 'pptx-preview';
+export type EngineId = 'ours' | 'pptx-preview' | 'pptxviewjs' | 'aiden0z';
 
 export interface Timing {
   /** Fetching or reading the bytes. Reported separately so it can be excluded. */
@@ -93,6 +106,26 @@ async function fetchFixture(name: string): Promise<{ bytes: ArrayBuffer; fetchMs
   return { bytes, fetchMs: performance.now() - t };
 }
 
+/**
+ * Forces style and layout for a DOM-based engine, and returns once they are done.
+ *
+ * A DOM renderer has not finished when its call returns — it has queued a tree the
+ * browser has yet to lay out, and that cost is real. The obvious way to capture it is to
+ * wait for a couple of animation frames, and that is what this harness did at first. It
+ * was wrong: `requestAnimationFrame` is paced to vsync, so the wait cost a flat ~16.6ms
+ * in headless Chromium no matter how much work the engine had done. Every DOM engine
+ * scored an identical ~14.5ms on every fixture — the number was measuring the wait, not
+ * the renderer, and it flattered this project's canvas path, which pays no such wait.
+ *
+ * Reading `offsetHeight` instead forces a synchronous style-and-layout pass and returns
+ * immediately after it. Paint and composite are still deferred — but they are equally
+ * deferred for a canvas, so the two are finally being timed to the same point.
+ */
+function flushLayout(el: HTMLElement): void {
+  void el.offsetHeight;
+  void el.getBoundingClientRect().height;
+}
+
 /** Renders with this project's viewer. */
 async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
   host.replaceChildren();
@@ -102,6 +135,7 @@ async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number):
   host.appendChild(canvas);
 
   const t0 = performance.now();
+  const { Presentation } = await import('pptx-viewer');
   // Each engine gets its own copy: a consumer is free to detach the buffer it is given.
   const deck = await Presentation.open(bytes.slice(0));
   const openMs = performance.now() - t0;
@@ -141,9 +175,9 @@ async function renderPptxPreview(
   mount.style.height = `${H}px`;
   host.appendChild(mount);
 
-  const previewer = initPptxPreview(mount, { width: W, height: H, mode: 'slide' });
-
   const t0 = performance.now();
+  const { init: initPptxPreview } = await import('pptx-preview');
+  const previewer = initPptxPreview(mount, { width: W, height: H, mode: 'slide' });
   await previewer.load(bytes.slice(0));
   const openMs = performance.now() - t0;
 
@@ -151,9 +185,58 @@ async function renderPptxPreview(
   const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
   const t1 = performance.now();
   previewer.renderSingleSlide(index);
-  // Its render is synchronous, but let the browser lay the resulting DOM out before
-  // calling it done — otherwise we would be timing less work than the user waits for.
-  await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+  flushLayout(mount);
+  const renderMs = performance.now() - t1;
+
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
+}
+
+/** Renders with pptxviewjs, which draws to a canvas we supply. */
+async function renderPptxViewJs(
+  host: HTMLElement,
+  bytes: ArrayBuffer,
+  slide: number,
+): Promise<Timing> {
+  host.replaceChildren();
+  const canvas = document.createElement('canvas');
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  host.appendChild(canvas);
+
+  const t0 = performance.now();
+  const { PPTXViewer } = await import('pptxviewjs');
+  const viewer = new PPTXViewer({ canvas, slideSizeMode: 'fit' });
+  await viewer.loadFile(bytes.slice(0));
+  const openMs = performance.now() - t0;
+
+  const count = viewer.getSlideCount?.() ?? 1;
+  const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
+  const t1 = performance.now();
+  await viewer.renderSlide(index, canvas, { scale: DPR });
+  const renderMs = performance.now() - t1;
+
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
+}
+
+/** Renders with @aiden0z/pptx-renderer, which builds a DOM tree in a container. */
+async function renderAiden(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
+  host.replaceChildren();
+  const mount = document.createElement('div');
+  mount.style.width = `${W}px`;
+  mount.style.height = `${H}px`;
+  host.appendChild(mount);
+
+  const t0 = performance.now();
+  const { PptxViewer: AidenViewer } = await import('@aiden0z/pptx-renderer');
+  const viewer = new AidenViewer(mount, { width: W, fitMode: 'contain' });
+  await viewer.open(bytes.slice(0), { renderMode: 'slide' });
+  const openMs = performance.now() - t0;
+
+  const count = viewer.slideCount || 1;
+  const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
+  const t1 = performance.now();
+  await viewer.renderSlide(index);
+  flushLayout(mount);
   const renderMs = performance.now() - t1;
 
   return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
@@ -162,7 +245,12 @@ async function renderPptxPreview(
 const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
   ours: { label: 'pptx-viewer (this project)', run: renderOurs },
   'pptx-preview': { label: 'pptx-preview 1.0.7', run: renderPptxPreview },
+  pptxviewjs: { label: 'pptxviewjs 1.1.9', run: renderPptxViewJs },
+  aiden0z: { label: '@aiden0z/pptx-renderer 1.2.4', run: renderAiden },
 };
+
+/** Every engine, in display order. Kept next to ENGINES so the two cannot drift. */
+const ENGINE_IDS = Object.keys(ENGINES) as EngineId[];
 
 // --------------------------------------------------------------------- interactive
 
@@ -178,6 +266,23 @@ function Pane({
   onResult?: (engine: EngineId, timing: Timing | null, error: string | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+
+  // The render stays at W x H; only its presentation shrinks to whatever column width the
+  // grid gives this pane, so all four engines fit on one screen without any of them being
+  // measured at a different size from the others.
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const fit = () => {
+      const scale = el.clientWidth / W;
+      el.style.setProperty('--pane-scale', String(scale > 0 ? scale : 1));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [timing, setTiming] = useState<Timing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -216,7 +321,7 @@ function Pane({
   }, [engine, bytes, slide, onResult]);
 
   return (
-    <section style={{ flex: '0 0 auto' }}>
+    <section style={{ minWidth: 0 }}>
       <header style={{ marginBottom: 6 }}>
         <strong>{ENGINES[engine].label}</strong>
         <div style={{ color: error ? '#b00020' : '#666', fontSize: 13, minHeight: 34 }}>
@@ -236,22 +341,39 @@ function Pane({
           )}
         </div>
       </header>
+      {/*
+        Every engine still renders at the full W x H — shrinking the render would change
+        what is being compared, and text layout is the first thing that would move. Only
+        the *display* is scaled, so four engines fit side by side on one screen.
+      */}
       <div
-        ref={host}
-        data-engine={engine}
+        ref={frame}
         style={{
-          width: W,
-          height: H,
-          background: '#fff',
-          border: '1px solid #ddd',
+          width: '100%',
+          aspectRatio: `${W} / ${H}`,
           overflow: 'hidden',
-          position: 'relative',
-          display: 'grid',
-          placeItems: 'center',
-          color: '#bbb',
+          border: '1px solid #ddd',
+          background: '#fff',
         }}
       >
-        {!bytes && 'no file'}
+        <div
+          ref={host}
+          data-engine={engine}
+          style={{
+            width: W,
+            height: H,
+            transform: `scale(var(--pane-scale, 1))`,
+            transformOrigin: 'top left',
+            background: '#fff',
+            overflow: 'hidden',
+            position: 'relative',
+            display: 'grid',
+            placeItems: 'center',
+            color: '#bbb',
+          }}
+        >
+          {!bytes && 'no file'}
+        </div>
       </div>
     </section>
   );
@@ -313,15 +435,20 @@ function App() {
 
   // Slide count can differ between engines — that disagreement is itself a finding, so
   // navigation is bounded by the larger of the two and each pane clamps its own.
-  const counts = (['ours', 'pptx-preview'] as EngineId[])
-    .map((e) => results[e]?.timing?.slideCount)
-    .filter((n): n is number => typeof n === 'number');
+  const counts = ENGINE_IDS.map((e) => results[e]?.timing?.slideCount).filter(
+    (n): n is number => typeof n === 'number',
+  );
   const maxSlides = counts.length > 0 ? Math.max(...counts) : 1;
-  const disagree = counts.length === 2 && counts[0] !== counts[1];
+  const disagree = counts.length > 1 && new Set(counts).size > 1;
 
   const ours = results.ours?.timing;
-  const other = results['pptx-preview']?.timing;
-  const speedup = ours && other ? other.totalMs / Math.max(ours.totalMs, 0.001) : null;
+  // Compared against the *fastest* competitor, not a chosen one — beating the weakest
+  // engine in the field is not a claim worth putting on screen.
+  const rivals = ENGINE_IDS.filter((e) => e !== 'ours')
+    .map((e) => results[e]?.timing?.totalMs)
+    .filter((n): n is number => typeof n === 'number');
+  const best = rivals.length > 0 ? Math.min(...rivals) : null;
+  const speedup = ours && best != null ? best / Math.max(ours.totalMs, 0.001) : null;
 
   return (
     <main
@@ -340,8 +467,9 @@ function App() {
     >
       <h1 style={{ fontSize: 19, marginTop: 0 }}>pptx renderer comparison</h1>
       <p style={{ color: '#555', maxWidth: 780, marginTop: 0 }}>
-        Same bytes, same slide, same pixel size, rendered by both engines. Timings here are
-        indicative — the two share a page and a warm cache. For measured numbers run{' '}
+        Same bytes, same slide, same pixel size, rendered by every engine. Timings here are
+        indicative only — the engines share a page and each other's warm caches, so they
+        flatter whichever loads last. For measured numbers run{' '}
         <code>npm run compare</code>, which loads each engine in its own page and scores
         accuracy against LibreOffice.
       </p>
@@ -434,8 +562,8 @@ function App() {
             }}
           >
             {speedup >= 1
-              ? `pptx-viewer is ${speedup.toFixed(1)}× faster on this slide`
-              : `pptx-preview is ${(1 / speedup).toFixed(1)}× faster on this slide`}
+              ? `pptx-viewer is ${speedup.toFixed(1)}× faster than the next best on this slide`
+              : `the fastest other engine is ${(1 / speedup).toFixed(1)}× faster on this slide`}
           </span>
         )}
       </div>
@@ -447,18 +575,20 @@ function App() {
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <Pane engine="ours" bytes={source?.bytes ?? null} slide={slide} onResult={onResult} />
-        <Pane
-          engine="pptx-preview"
-          bytes={source?.bytes ?? null}
-          slide={slide}
-          onResult={onResult}
-        />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: 20 }}>
+        {ENGINE_IDS.map((id) => (
+          <Pane
+            key={id}
+            engine={id}
+            bytes={source?.bytes ?? null}
+            slide={slide}
+            onResult={onResult}
+          />
+        ))}
       </div>
 
       <p style={{ color: '#777', marginTop: 20, maxWidth: 780 }}>
-        Nothing is uploaded. Both engines run entirely in this page, so you can compare a
+        Nothing is uploaded. Every engine runs entirely in this page, so you can compare a
         confidential deck without it leaving your machine.
       </p>
     </main>

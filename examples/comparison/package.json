@@ -8,8 +8,11 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@aiden0z/pptx-renderer": "^1.2.4",
+    "chart.js": "^4.5.1",
     "pptx-preview": "^1.0.7",
     "pptx-viewer": "file:../../packages/viewer",
+    "pptxviewjs": "^1.1.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

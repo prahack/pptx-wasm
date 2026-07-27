@@ -88,9 +88,40 @@ function resolveSuites() {
 
 const suites = resolveSuites();
 
+/**
+ * The engines under test, with what each one ships.
+ *
+ * `self` is the ES bundle a bundler would pull in; `deps` are the runtime packages it
+ * drags with it. Counting only the entry file understates several of these by an order of
+ * magnitude — pptx-preview's own bundle is 134KB and the echarts it imports for charts is
+ * far larger. A user downloads both, so both are counted.
+ *
+ * Ours is measured from the built `dist` instead, because the WASM is the payload and it
+ * has no runtime dependencies to add.
+ */
 const ENGINES = [
-  { id: 'ours', label: 'pptx-viewer (this project)' },
-  { id: 'pptx-preview', label: 'pptx-preview 1.0.7' },
+  { id: 'ours', label: 'pptx-viewer (this project)', dist: 'packages/viewer/dist', deps: [] },
+  {
+    id: 'pptx-preview',
+    label: 'pptx-preview 1.0.7',
+    self: 'pptx-preview/dist/pptx-preview.es.js',
+    deps: ['jszip', 'lodash', 'echarts', 'uuid', 'tslib'],
+  },
+  {
+    id: 'pptxviewjs',
+    label: 'pptxviewjs 1.1.9',
+    self: 'pptxviewjs/dist/PptxViewJS.es.js',
+    // Its package.json declares no dependencies, but the bundle imports `chart.js/auto`.
+    // Without it installed the module graph fails to resolve and nothing renders, so it
+    // is a dependency in every sense except the declared one — and it is counted here.
+    deps: ['chart.js'],
+  },
+  {
+    id: 'aiden0z',
+    label: '@aiden0z/pptx-renderer 1.2.4',
+    self: '@aiden0z/pptx-renderer/dist/aiden0z-pptx-renderer.es.js',
+    deps: ['jszip', 'echarts'],
+  },
 ];
 
 // --------------------------------------------------------------------- payload
@@ -116,31 +147,30 @@ function payloadOf(dir, exts = ['.js', '.wasm', '.cjs', '.css']) {
   return total;
 }
 
-/**
- * What each engine ships.
- *
- * For ours that is the built `dist`. For pptx-preview it is the ES bundle plus the
- * runtime dependencies a bundler would pull in with it — counting only its own 134KB
- * file would understate it by an order of magnitude, since echarts alone dwarfs it.
- */
+/** Gzipped bytes each engine ships, split into its own bundle and its dependencies. */
 function measurePayloads() {
-  const ours = payloadOf(join(ROOT, 'packages/viewer/dist'));
-
   const modules = join(APP, 'node_modules');
-  const previewSelf = existsSync(join(modules, 'pptx-preview/dist/pptx-preview.es.js'))
-    ? gzipSync(readFileSync(join(modules, 'pptx-preview/dist/pptx-preview.es.js'))).length
-    : null;
-  const deps = ['jszip', 'lodash', 'echarts', 'uuid', 'tslib'];
-  const depSizes = {};
-  let depTotal = 0;
-  for (const d of deps) {
-    const size = payloadOf(join(modules, d, 'dist')) ?? payloadOf(join(modules, d));
-    if (size) {
-      depSizes[d] = size;
-      depTotal += size;
+  const out = {};
+  for (const e of ENGINES) {
+    if (e.dist) {
+      out[e.id] = { self: payloadOf(join(ROOT, e.dist)) ?? 0, deps: {}, total: 0 };
+      out[e.id].total = out[e.id].self;
+      continue;
     }
+    const selfPath = join(modules, e.self);
+    const self = existsSync(selfPath) ? gzipSync(readFileSync(selfPath)).length : null;
+    const deps = {};
+    let depTotal = 0;
+    for (const d of e.deps) {
+      const size = payloadOf(join(modules, d, 'dist')) ?? payloadOf(join(modules, d));
+      if (size) {
+        deps[d] = size;
+        depTotal += size;
+      }
+    }
+    out[e.id] = { self, deps, total: (self ?? 0) + depTotal };
   }
-  return { ours, previewSelf, previewDeps: depSizes, previewTotal: (previewSelf ?? 0) + depTotal };
+  return out;
 }
 
 // --------------------------------------------------------------------- server
@@ -388,36 +418,37 @@ async function main() {
 }
 
 function report(rows, payload, haveOracle) {
+  const label = (id) => ENGINES.find((e) => e.id === id)?.label ?? id;
+  const EW = Math.max(...ENGINES.map((e) => e.id.length)) + 1;
+
   console.log('\n' + '='.repeat(78));
   console.log('PAYLOAD (gzipped, what the browser downloads)');
   console.log('='.repeat(78));
-  console.log(`  pptx-viewer (this project)   ${kb(payload.ours)}   wasm + js, no runtime deps`);
-  console.log(`  pptx-preview                 ${kb(payload.previewTotal)}   bundle ${kb(payload.previewSelf)} + deps:`);
-  for (const [name, size] of Object.entries(payload.previewDeps)) {
-    console.log(`      ${name.padEnd(24)} ${kb(size)}`);
+  for (const e of ENGINES) {
+    const pay = payload[e.id];
+    if (!pay) continue;
+    const note = e.dist ? 'wasm + js, no runtime deps' : `bundle ${kb(pay.self)} + deps`;
+    console.log(`  ${label(e.id).padEnd(30)} ${kb(pay.total).padStart(10)}   ${note}`);
+    for (const [name, size] of Object.entries(pay.deps)) {
+      console.log(`      ${name.padEnd(26)} ${kb(size).padStart(10)}`);
+    }
   }
 
   console.log('\n' + '='.repeat(78));
   console.log('PER FIXTURE');
   console.log('='.repeat(78));
   const w = Math.max(8, ...rows.map((r) => r.suite.length));
-  const head = haveOracle
-    ? `  ${'fixture'.padEnd(w)} ${'engine'.padEnd(14)} ${'cold'.padStart(9)} ${'warm'.padStart(9)} ${'canvas'.padStart(9)} ${'content'.padStart(9)}`
-    : `  ${'fixture'.padEnd(w)} ${'engine'.padEnd(14)} ${'cold'.padStart(9)} ${'warm'.padStart(9)}`;
-  console.log(head);
-  if (haveOracle) {
-    console.log(
-      `  ${''.padEnd(w)} ${''.padEnd(14)} ${''.padStart(9)} ${''.padStart(9)}` +
-        `  % of slide  % of content`,
-    );
-  }
+  console.log(
+    `  ${'fixture'.padEnd(w)} ${'engine'.padEnd(EW)} ${'cold'.padStart(9)} ${'warm'.padStart(9)}` +
+      (haveOracle ? ` ${'canvas'.padStart(9)} ${'content'.padStart(9)}` : ''),
+  );
 
   for (const r of rows) {
     if (r.error) {
-      console.log(`  ${r.suite.padEnd(w)} ${r.engine.padEnd(14)} FAILED: ${r.error}`);
+      console.log(`  ${r.suite.padEnd(w)} ${r.engine.padEnd(EW)} FAILED: ${r.error}`);
       continue;
     }
-    const line = `  ${r.suite.padEnd(w)} ${r.engine.padEnd(14)} ${ms(r.cold).padStart(9)} ${ms(r.warm).padStart(9)}`;
+    const line = `  ${r.suite.padEnd(w)} ${r.engine.padEnd(EW)} ${ms(r.cold).padStart(9)} ${ms(r.warm).padStart(9)}`;
     console.log(
       haveOracle
         ? `${line} ${(r.sizeMismatch ? 'size!' : pct(r.accuracy)).padStart(9)} ${pct(r.ink).padStart(9)}`
@@ -425,45 +456,56 @@ function report(rows, payload, haveOracle) {
     );
   }
 
-  // Aggregate, counting only fixtures where both engines produced something.
+  // Aggregate only over fixtures *every* engine rendered, so no engine is flattered by
+  // being scored on an easier subset than its competitors.
   const bySuite = new Map();
   for (const r of rows) {
     if (r.error) continue;
     if (!bySuite.has(r.suite)) bySuite.set(r.suite, {});
     bySuite.get(r.suite)[r.engine] = r;
   }
-  const both = [...bySuite.values()].filter((s) => s.ours && s['pptx-preview']);
+  const ids = ENGINES.map((e) => e.id);
+  const common = [...bySuite.values()].filter((s) => ids.every((id) => s[id]));
 
-  if (both.length > 0) {
-    console.log('\n' + '='.repeat(78));
-    console.log(`SUMMARY over ${both.length} fixture(s) both engines rendered`);
-    console.log('='.repeat(78));
-    const avg = (f) => both.reduce((a, s) => a + (f(s) ?? 0), 0) / both.length;
-    console.log(`  cold  ours ${ms(avg((s) => s.ours.cold))}  vs  pptx-preview ${ms(avg((s) => s['pptx-preview'].cold))}`);
-    console.log(`  warm  ours ${ms(avg((s) => s.ours.warm))}  vs  pptx-preview ${ms(avg((s) => s['pptx-preview'].warm))}`);
-    if (haveOracle) {
-      const oursAcc = both.filter((s) => s.ours.accuracy != null);
-      const prevAcc = both.filter((s) => s['pptx-preview'].accuracy != null);
-      if (oursAcc.length && prevAcc.length) {
-        const mean = (rows, key, engine) =>
-          rows.reduce((a, s) => a + s[engine][key], 0) / rows.length;
-        console.log(
-          `  vs oracle, % of slide    ours ${pct(mean(oursAcc, 'accuracy', 'ours'))}` +
-            `   vs  pptx-preview ${pct(mean(prevAcc, 'accuracy', 'pptx-preview'))}`,
-        );
-        console.log(
-          `  vs oracle, % of content  ours ${pct(mean(oursAcc, 'ink', 'ours'))}` +
-            `   vs  pptx-preview ${pct(mean(prevAcc, 'ink', 'pptx-preview'))}`,
-        );
-        console.log(
-          '\n  Lower is closer to LibreOffice. Prefer the content figure: a slide is mostly\n' +
-            '  white, so a badly misplaced text block barely moves the canvas figure.',
-        );
-      }
+  console.log('\n' + '='.repeat(78));
+  console.log(`SUMMARY over ${common.length} fixture(s) every engine rendered`);
+  console.log('='.repeat(78));
+  if (common.length === 0) {
+    console.log('  No fixture was rendered by every engine, so there is nothing to compare\n' +
+      '  on equal terms. The per-fixture table above still stands.');
+  } else {
+    const mean = (id, key) => common.reduce((a, s) => a + (s[id][key] ?? 0), 0) / common.length;
+    const cols = haveOracle
+      ? [['cold', 'cold', ms], ['warm', 'warm', ms], ['canvas', 'accuracy', pct], ['content', 'ink', pct]]
+      : [['cold', 'cold', ms], ['warm', 'warm', ms]];
+    console.log(
+      `  ${'engine'.padEnd(30)} ${'payload'.padStart(10)} ` +
+        cols.map(([h]) => h.padStart(9)).join(' '),
+    );
+    for (const id of ids) {
+      console.log(
+        `  ${label(id).padEnd(30)} ${kb(payload[id]?.total).padStart(10)} ` +
+          cols.map(([, k, f]) => f(mean(id, k)).padStart(9)).join(' '),
+      );
     }
-    const failedPreview = rows.filter((r) => r.engine === 'pptx-preview' && r.error).length;
-    if (failedPreview > 0) {
-      console.log(`\n  Note: pptx-preview failed on ${failedPreview} fixture(s); those are excluded above.`);
+    if (haveOracle) {
+      console.log(
+        '\n  Lower is closer to LibreOffice. Prefer the content figure: a slide is mostly\n' +
+          '  white, so a badly misplaced text block barely moves the canvas figure.\n' +
+          '  LibreOffice is an imperfect judge (see CLAUDE.md) — but it is the same\n' +
+          '  imperfect judge for every engine, and it is not one that we wrote.',
+      );
+    }
+  }
+
+  // Failures are part of the result: an engine that cannot open a deck has not "tied".
+  for (const id of ids) {
+    const failed = rows.filter((r) => r.engine === id && r.error);
+    if (failed.length > 0) {
+      console.log(
+        `\n  ${label(id)} failed on ${failed.length} fixture(s): ` +
+          failed.map((f) => f.suite).join(', '),
+      );
     }
   }
 
