@@ -130,6 +130,7 @@ fn parse_pic(r: &mut Reader<'_>) -> Shape {
                     picture.embed_id = b.embed_id;
                     picture.src_rect = b.src_rect;
                     picture.alpha = b.alpha;
+                    picture.mode = b.mode;
                 }
                 true
             }

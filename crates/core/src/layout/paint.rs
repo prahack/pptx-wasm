@@ -3,7 +3,7 @@
 //! Everything colour-related is resolved here: theme lookup, colour map, `phClr`
 //! substitution, tint/shade. Downstream of this module a colour is just four bytes.
 
-use crate::dl::{Color, Gradient, GradientStop, LineCap, LineJoin, Paint, Point, Rect, Stroke};
+use crate::dl::{Gradient, GradientStop, LineCap, LineJoin, Paint, Point, Rect, Stroke};
 use crate::emu;
 use crate::model::fill::{
     BlipMode, DashStyle, Fill, GradientKind, Line, LineCapStyle, LineJoinStyle,
@@ -88,21 +88,35 @@ pub fn fill_to_paint(
             if src.is_empty() {
                 return None;
             }
-            let _ = b.mode == BlipMode::Tile;
+            let tile = match b.mode {
+                BlipMode::Tile {
+                    scale_x,
+                    scale_y,
+                    offset_x,
+                    offset_y,
+                } => Some(crate::dl::Tile {
+                    scale_x,
+                    scale_y,
+                    offset_x: emu::to_pt(offset_x),
+                    offset_y: emu::to_pt(offset_y),
+                }),
+                BlipMode::Stretch => None,
+            };
             Some(Paint::Image {
                 image: id,
                 src,
                 opacity: b.alpha.clamp(0.0, 1.0),
+                tile,
             })
         }
         Fill::Pattern(p) => {
-            // Patterns are approximated by blending the two colours by the preset's
-            // documented coverage. A real hatch needs a tile the display list cannot
-            // express yet, and a flat blend reads far better than dropping the fill.
-            let fg = resolver.color(&p.foreground);
-            let bg = resolver.color(&p.background);
-            let coverage = pattern_coverage(&p.preset);
-            Some(Paint::Solid(blend(fg, bg, coverage)))
+            let foreground = resolver.color(&p.foreground);
+            let background = resolver.color(&p.background);
+            Some(Paint::Hatch {
+                pattern: crate::dl::HatchPattern::from_preset(&p.preset),
+                foreground,
+                background,
+            })
         }
     }
 }
@@ -162,45 +176,6 @@ fn linear_endpoints(angle_deg: f32, bounds: Rect) -> (Point, Point) {
     )
 }
 
-fn blend(fg: Color, bg: Color, t: f32) -> Color {
-    let t = t.clamp(0.0, 1.0);
-    let mix = |a: u8, b: u8| {
-        ((a as f32 * t) + (b as f32 * (1.0 - t)))
-            .round()
-            .clamp(0.0, 255.0) as u8
-    };
-    Color {
-        r: mix(fg.r, bg.r),
-        g: mix(fg.g, bg.g),
-        b: mix(fg.b, bg.b),
-        a: mix(fg.a, bg.a),
-    }
-}
-
-/// Fraction of a pattern tile covered by the foreground colour.
-fn pattern_coverage(preset: &str) -> f32 {
-    match preset {
-        "pct5" => 0.05,
-        "pct10" => 0.10,
-        "pct20" => 0.20,
-        "pct25" => 0.25,
-        "pct30" => 0.30,
-        "pct40" => 0.40,
-        "pct50" => 0.50,
-        "pct60" => 0.60,
-        "pct70" => 0.70,
-        "pct75" => 0.75,
-        "pct80" => 0.80,
-        "pct90" => 0.90,
-        "ltHorz" | "ltVert" | "ltUpDiag" | "ltDnDiag" => 0.25,
-        "dkHorz" | "dkVert" | "dkUpDiag" | "dkDnDiag" => 0.5,
-        "smGrid" | "smCheck" => 0.35,
-        "lgGrid" | "lgCheck" => 0.45,
-        "solidDmnd" => 0.6,
-        _ => 0.5,
-    }
-}
-
 /// Default outline width when a line specifies a fill but no width: 0.75pt, PowerPoint's
 /// own default for a new shape.
 const DEFAULT_LINE_WIDTH_EMU: i64 = 9_525;
@@ -246,6 +221,7 @@ pub fn line_to_stroke(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dl::Color;
     use crate::model::color::{ColorRef, SchemeColor};
     use crate::model::fill::{GradientFill, GradientStopSpec};
     use crate::model::shape::{SlideLayout, SlideMaster};
@@ -403,19 +379,121 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_fill_blends_toward_its_coverage() {
+    fn a_pattern_fill_reaches_the_renderer_as_a_pattern() {
         let e = env();
         let r = Resolver::new(&e.pres, &e.chain);
         let p = Fill::Pattern(crate::model::fill::PatternFill {
             foreground: ColorRef::srgb(Color::BLACK),
             background: ColorRef::srgb(Color::WHITE),
-            preset: "pct25".into(),
+            preset: "ltUpDiag".into(),
         });
         match fill_to_paint(&p, BOX, &r, &e.pres, "p") {
-            // 25% black over white.
-            Some(Paint::Solid(c)) => assert_eq!(c.r, 191),
-            other => panic!("expected a solid blend, got {other:?}"),
+            Some(Paint::Hatch {
+                pattern,
+                foreground,
+                background,
+            }) => {
+                // The pattern reaches the renderer as a pattern, not pre-flattened into
+                // an average colour — flattening is what made textured backgrounds
+                // render as a flat wash.
+                assert_eq!(
+                    pattern,
+                    crate::dl::HatchPattern::DiagonalUp { heavy: false }
+                );
+                assert_eq!(foreground, Color::BLACK);
+                assert_eq!(background, Color::WHITE);
+            }
+            other => panic!("expected a hatch, got {other:?}"),
         }
+    }
+
+    /// A package with one slide part related to one image, so blip fills resolve.
+    fn env_with_image() -> Env {
+        use std::io::{Cursor, Write};
+        let mut buf = Vec::new();
+        {
+            let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
+            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+            w.start_file("[Content_Types].xml", opts).expect("s");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="png" ContentType="image/png"/></Types>"#,
+            )
+            .expect("w");
+            w.start_file("ppt/slides/_rels/slide1.xml.rels", opts)
+                .expect("s");
+            w.write_all(
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+</Relationships>"#,
+            )
+            .expect("w");
+            w.start_file("ppt/media/image1.png", opts).expect("s");
+            w.write_all(b"\x89PNG\r\n\x1a\n").expect("w");
+            w.finish().expect("f");
+        }
+        let pkg = crate::opc::Package::open(buf).expect("open");
+        Env {
+            pres: Presentation::new(pkg, 1, 1),
+            chain: SlideChain {
+                slide: Rc::new(Slide::default()),
+                layout: Some(Rc::new(SlideLayout::default())),
+                master: Some(Rc::new(SlideMaster::default())),
+                theme: Rc::new(Theme::default()),
+            },
+        }
+    }
+
+    const SLIDE_PART: &str = "ppt/slides/slide1.xml";
+
+    #[test]
+    fn a_tiled_bitmap_fill_keeps_its_repeat_rather_than_stretching() {
+        let e = env_with_image();
+        let r = Resolver::new(&e.pres, &e.chain);
+        let tiled = crate::model::fill::BlipFill {
+            embed_id: Some("rId1".into()),
+            mode: BlipMode::Tile {
+                scale_x: 0.5,
+                scale_y: 0.25,
+                // 1pt and 2pt, in EMUs.
+                offset_x: 12_700,
+                offset_y: 25_400,
+            },
+            ..Default::default()
+        };
+        // The tile must survive into the display list. Stretching a texture tile instead
+        // of repeating it averages it into a flat wash, which is how this looked when it
+        // was broken: plausible, and completely wrong.
+        match fill_to_paint(&Fill::Blip(tiled), BOX, &r, &e.pres, SLIDE_PART) {
+            Some(Paint::Image {
+                tile: Some(t),
+                opacity,
+                ..
+            }) => {
+                assert_eq!((t.scale_x, t.scale_y), (0.5, 0.25));
+                assert_eq!((t.offset_x, t.offset_y), (1.0, 2.0), "offsets are points");
+                assert_eq!(opacity, 1.0);
+            }
+            other => panic!("expected a tiled image, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_stretched_bitmap_fill_carries_no_tile() {
+        let e = env_with_image();
+        let r = Resolver::new(&e.pres, &e.chain);
+        let stretched = crate::model::fill::BlipFill {
+            embed_id: Some("rId1".into()),
+            mode: BlipMode::Stretch,
+            ..Default::default()
+        };
+        assert!(
+            matches!(
+                fill_to_paint(&Fill::Blip(stretched), BOX, &r, &e.pres, SLIDE_PART),
+                Some(Paint::Image { tile: None, .. })
+            ),
+            "stretch must not be reported as a tile"
+        );
     }
 
     #[test]

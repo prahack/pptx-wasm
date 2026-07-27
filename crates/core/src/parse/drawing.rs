@@ -321,7 +321,13 @@ fn parse_blip_fill(r: &mut Reader<'_>, e: &BytesStart<'_>, empty: bool) -> BlipF
                 true
             }
             b"tile" => {
-                f.mode = BlipMode::Tile;
+                // `sx`/`sy` are percentages in thousandths; absent means natural size.
+                f.mode = BlipMode::Tile {
+                    scale_x: attr_percent(child, b"sx").unwrap_or(1.0).max(0.01),
+                    scale_y: attr_percent(child, b"sy").unwrap_or(1.0).max(0.01),
+                    offset_x: attr_i64(child, b"tx").unwrap_or(0),
+                    offset_y: attr_i64(child, b"ty").unwrap_or(0),
+                };
                 false
             }
             _ => false,

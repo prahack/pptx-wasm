@@ -96,6 +96,13 @@ a decision to record rather than a knob to turn, and pixel tolerance is a poor d
 "did this feature stop working" — a shadow vanishing entirely moves the figure by half a
 percent. Unit tests are the guard for that.
 
+Sometimes the oracle is not merely imprecise but *wrong*: it ignores `<a:tile>` on a blip
+fill and stretches the image instead. Diffing against it there would score a correct render
+worse than a broken one. Such a suite sets `"oracle": false` and compares against a
+reviewed reference committed in [`tests/golden/reference/`](tests/golden/reference/); the
+runner labels those lines so the weaker guarantee is visible where the number is read. So
+before trusting a new tolerance, check the oracle renders the feature at all.
+
 **`npm run test:browsers`** asks *does it work everywhere?* Every fixture is rendered in
 all three engines and the extracted text compared. This is where the text-backend decision
 gets checked against reality rather than argued about.

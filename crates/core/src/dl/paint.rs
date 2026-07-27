@@ -97,16 +97,118 @@ pub enum Gradient {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ImageId(pub u32);
 
+/// How a bitmap fill repeats.
+///
+/// The tile's size is the image's own pixel size scaled by these factors — which is why
+/// it is expressed as a scale rather than an absolute size. Layout does not know how
+/// large the decoded image is; only the renderer does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Tile {
+    pub scale_x: f32,
+    pub scale_y: f32,
+    /// Offset of the first tile from the fill's origin, in points.
+    pub offset_x: f32,
+    pub offset_y: f32,
+}
+
+impl Default for Tile {
+    fn default() -> Self {
+        Tile {
+            scale_x: 1.0,
+            scale_y: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        }
+    }
+}
+
+/// A preset hatch, from `<a:pattFill prst="...">`.
+///
+/// The ~48 OOXML presets collapse to a handful of drawable families. Keeping them as a
+/// small enum rather than the raw preset string means the backend has a closed set to
+/// implement, and an unrecognised preset degrades to a dot screen of roughly the right
+/// darkness instead of disappearing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HatchPattern {
+    /// A dot screen at the given coverage percentage.
+    Percent(u8),
+    Horizontal {
+        heavy: bool,
+    },
+    Vertical {
+        heavy: bool,
+    },
+    DiagonalUp {
+        heavy: bool,
+    },
+    DiagonalDown {
+        heavy: bool,
+    },
+    Grid {
+        heavy: bool,
+    },
+    DiagonalGrid {
+        heavy: bool,
+    },
+}
+
+impl HatchPattern {
+    /// Maps an OOXML preset name onto a drawable family.
+    pub fn from_preset(name: &str) -> HatchPattern {
+        match name {
+            "pct5" => HatchPattern::Percent(5),
+            "pct10" => HatchPattern::Percent(10),
+            "pct20" => HatchPattern::Percent(20),
+            "pct25" => HatchPattern::Percent(25),
+            "pct30" => HatchPattern::Percent(30),
+            "pct40" => HatchPattern::Percent(40),
+            "pct50" => HatchPattern::Percent(50),
+            "pct60" => HatchPattern::Percent(60),
+            "pct70" => HatchPattern::Percent(70),
+            "pct75" => HatchPattern::Percent(75),
+            "pct80" => HatchPattern::Percent(80),
+            "pct90" => HatchPattern::Percent(90),
+            "ltHorz" | "narHorz" => HatchPattern::Horizontal { heavy: false },
+            "horz" | "dkHorz" => HatchPattern::Horizontal { heavy: true },
+            "ltVert" | "narVert" => HatchPattern::Vertical { heavy: false },
+            "vert" | "dkVert" => HatchPattern::Vertical { heavy: true },
+            "ltUpDiag" | "wdUpDiag" => HatchPattern::DiagonalUp { heavy: false },
+            "upDiag" | "dkUpDiag" => HatchPattern::DiagonalUp { heavy: true },
+            "ltDnDiag" | "wdDnDiag" => HatchPattern::DiagonalDown { heavy: false },
+            "dnDiag" | "dkDnDiag" => HatchPattern::DiagonalDown { heavy: true },
+            "smGrid" | "lgGrid" | "dotGrid" => HatchPattern::Grid { heavy: false },
+            "smCheck" | "lgCheck" | "openDmnd" | "solidDmnd" => HatchPattern::Grid { heavy: true },
+            "smConfetti" | "lgConfetti" | "diagBrick" | "horzBrick" => {
+                HatchPattern::DiagonalGrid { heavy: false }
+            }
+            "trellis" | "weave" | "plaid" | "shingle" | "zigZag" | "wave" => {
+                HatchPattern::DiagonalGrid { heavy: true }
+            }
+            // Unknown presets read as a mid screen rather than vanishing.
+            _ => HatchPattern::Percent(50),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Paint {
     Solid(Color),
     Gradient(Gradient),
-    /// A bitmap fill. `tile` selects stretch vs. repeat semantics.
+    /// A bitmap fill.
     Image {
         image: ImageId,
         /// Region of the source image to use, in normalised 0..1 coordinates.
         src: Rect,
         opacity: f32,
+        /// `Some` when the image repeats rather than stretching to the shape.
+        tile: Option<Tile>,
+    },
+    /// A two-colour preset hatch. The backend builds the tile; the display list only
+    /// says which pattern and in what colours, so layout never rasterises anything.
+    Hatch {
+        pattern: HatchPattern,
+        foreground: Color,
+        background: Color,
     },
 }
 
@@ -125,6 +227,11 @@ impl Paint {
                 }
             },
             Paint::Image { opacity, .. } => *opacity <= 0.0,
+            Paint::Hatch {
+                foreground,
+                background,
+                ..
+            } => foreground.is_transparent() && background.is_transparent(),
         }
     }
 }
@@ -218,6 +325,48 @@ mod tests {
             .with_alpha_factor(0.5)
             .with_alpha_factor(0.5);
         assert_eq!(c.a, 64); // 255 * 0.5 = 128 (rounded), * 0.5 = 64
+    }
+
+    #[test]
+    fn hatch_presets_map_onto_drawable_families() {
+        assert_eq!(
+            HatchPattern::from_preset("pct25"),
+            HatchPattern::Percent(25)
+        );
+        assert_eq!(
+            HatchPattern::from_preset("ltUpDiag"),
+            HatchPattern::DiagonalUp { heavy: false }
+        );
+        assert_eq!(
+            HatchPattern::from_preset("dkUpDiag"),
+            HatchPattern::DiagonalUp { heavy: true }
+        );
+        assert_eq!(
+            HatchPattern::from_preset("dkHorz"),
+            HatchPattern::Horizontal { heavy: true }
+        );
+        // An unrecognised preset still draws something of about the right darkness.
+        assert_eq!(
+            HatchPattern::from_preset("somethingNew"),
+            HatchPattern::Percent(50)
+        );
+    }
+
+    #[test]
+    fn a_hatch_is_invisible_only_when_both_colours_are() {
+        let clear = Color::TRANSPARENT;
+        assert!(Paint::Hatch {
+            pattern: HatchPattern::Percent(50),
+            foreground: clear,
+            background: clear,
+        }
+        .is_invisible());
+        assert!(!Paint::Hatch {
+            pattern: HatchPattern::Percent(50),
+            foreground: Color::BLACK,
+            background: clear,
+        }
+        .is_invisible());
     }
 
     #[test]

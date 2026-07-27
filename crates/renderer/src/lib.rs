@@ -192,6 +192,7 @@ mod tests {
                 image: ImageId(5),
                 src: Rect::new(0.0, 0.0, 1.0, 1.0),
                 opacity: 1.0,
+                tile: None,
             },
             rule: Default::default(),
         });
@@ -214,6 +215,7 @@ mod tests {
                     image: ImageId(7),
                     src: Rect::new(0.0, 0.0, 1.0, 1.0),
                     opacity: 1.0,
+                    tile: None,
                 },
                 ..Default::default()
             },

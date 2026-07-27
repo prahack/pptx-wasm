@@ -11,7 +11,8 @@ pub mod text;
 
 pub use geom::{Path, PathVerb, Point, Rect, Transform};
 pub use paint::{
-    Color, FillRule, Gradient, GradientStop, ImageId, LineCap, LineJoin, Paint, Shadow, Stroke,
+    Color, FillRule, Gradient, GradientStop, HatchPattern, ImageId, LineCap, LineJoin, Paint,
+    Shadow, Stroke, Tile,
 };
 pub use text::{Decorations, FontSpec, FontStyle, FontWeight, TextRun};
 

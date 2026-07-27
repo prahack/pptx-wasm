@@ -111,6 +111,29 @@ Hence the rule: authoritative for colours, positions, geometry and inheritance; 
 opinion for auto-scaled chart axes, Gaussian blur radii and font hinting. That is why every
 tolerance in `suites.json` carries a written reason rather than only a number.
 
+### Where it is *wrong*, which is a different problem
+
+`m5b` is a case of the oracle making a defensible different choice. `m5f` is not:
+**LibreOffice ignores `<a:tile>` on a blip fill and stretches the image instead** — the
+exact bug the fixture exists to catch.
+
+That inverts the test. A correct repeating render diffs ~4% against the oracle; a
+regression back to stretching would diff near *zero*. The suite would have been loudest
+when the feature was working and silent when it broke — worse than having no test, because
+it manufactures confidence. It passed at 4.4% under a 6% tolerance, and would have gone on
+passing through the regression it was written to catch.
+
+So a suite can set `"oracle": false` and compare against a reviewed reference in
+`tests/golden/out/reference/` instead. That detects regressions without pretending to
+verify fidelity, and the runner labels every such line `[vs recorded reference, not the
+oracle]` so the weaker guarantee is visible at the point the number is read. Fidelity for
+those features is argued from ECMA-376 and asserted in unit tests.
+
+The general lesson, and the reason this is written down: **before trusting a tolerance,
+check that the oracle renders the feature at all.** A passing diff against a reference that
+does not implement the thing being tested says nothing. When adding a suite for a new
+feature, look at the oracle's PNG once, by eye, before accepting the number.
+
 ### The known gap
 
 **Nothing here has been validated against PowerPoint itself.** That leaves a class of error

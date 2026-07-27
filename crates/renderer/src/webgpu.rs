@@ -56,6 +56,9 @@ pub struct Requirements {
     /// pass. By far the most expensive primitive here, which is why it is counted apart
     /// from everything else.
     pub offscreen_passes: usize,
+    /// Hatch fills, each needing a small tile rasterised once and then sampled with
+    /// repeat addressing.
+    pub generated_tiles: usize,
     /// Commands this backend could not express. Non-empty means the abstraction has
     /// sprung a leak and something upstream is assuming Canvas2D.
     pub unsupported: Vec<String>,
@@ -139,6 +142,8 @@ impl Requirements {
                     textures.push(image.0);
                 }
             }
+            // A hatch is a generated tile: one small texture plus repeat sampling.
+            Paint::Hatch { .. } => self.generated_tiles += 1,
         }
     }
 
@@ -232,6 +237,7 @@ impl Renderer for WebGpuRenderer {
         self.requirements.stencil_clips += r.stencil_clips;
         self.requirements.gradients += r.gradients;
         self.requirements.offscreen_passes += r.offscreen_passes;
+        self.requirements.generated_tiles += r.generated_tiles;
         self.requirements.unsupported.extend(r.unsupported);
         if let Command::DrawText(run) = cmd {
             let key = run.font.to_css();

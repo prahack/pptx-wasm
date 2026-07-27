@@ -215,7 +215,27 @@ fn fmt_paint(p: &Paint) -> String {
                 format!("radial-gradient({} stops)", stops.len())
             }
         },
-        Paint::Image { image, opacity, .. } => format!("image#{}@{:.2}", image.0, opacity),
+        Paint::Image {
+            image,
+            opacity,
+            tile,
+            ..
+        } => match tile {
+            Some(t) => format!(
+                "image#{}@{:.2} tiled({:.2}x{:.2}+{:.1},{:.1})",
+                image.0, opacity, t.scale_x, t.scale_y, t.offset_x, t.offset_y
+            ),
+            None => format!("image#{}@{:.2}", image.0, opacity),
+        },
+        Paint::Hatch {
+            pattern,
+            foreground,
+            background,
+        } => format!(
+            "hatch {pattern:?} {} on {}",
+            foreground.to_css(),
+            background.to_css()
+        ),
     }
 }
 

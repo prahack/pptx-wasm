@@ -35,12 +35,23 @@ pub struct GradientFill {
 }
 
 /// How a bitmap fill maps onto the shape.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlipMode {
     /// `<a:stretch>` — one copy scaled to the shape's box.
     Stretch,
-    /// `<a:tile>` — repeated.
-    Tile,
+    /// `<a:tile tx ty sx sy>` — repeated at its natural size, scaled and offset.
+    ///
+    /// Dropping the repeat and stretching instead is not a small error: a texture tile is
+    /// typically a few dozen pixels, so stretching it across a slide averages it into a
+    /// flat wash and the texture disappears entirely.
+    Tile {
+        /// Scale factors as fractions of the image's natural size.
+        scale_x: f32,
+        scale_y: f32,
+        /// Offset of the first tile, in EMUs.
+        offset_x: crate::emu::Emu,
+        offset_y: crate::emu::Emu,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

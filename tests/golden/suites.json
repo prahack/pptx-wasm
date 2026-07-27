@@ -4,7 +4,7 @@
     "",
     "`maxDiffRatio` is the fraction of pixels allowed to differ by more than",
     "`threshold` (pixelmatch's 0..1 perceptual distance). Every tolerance has a written",
-    "reason. Widening one is a decision to record here, not a knob to turn quietly \u2014 if a",
+    "reason. Widening one is a decision to record here, not a knob to turn quietly — if a",
     "diff grows, the first question is whether the viewer regressed, and the second is",
     "whether the oracle is the thing that is wrong.",
     "",
@@ -60,13 +60,32 @@
       "id": "m5b",
       "fixture": "m5b-charts.pptx",
       "maxDiffRatio": 0.15,
-      "reason": "Deliberately the loosest suite. chart.xml carries data and formatting but no geometry, so every renderer computes the plot itself: LibreOffice picks its own axis scale, gap widths, label placement and legend metrics, and none of those are specified by the file. The structural things this suite actually guards are that the right number of bars/wedges appear, in the right order, with distinct series colours, inside the frame \u2014 a regression in any of those blows well past this figure. Judge it by the trend and by looking at the diff, not by the number alone."
+      "reason": "Deliberately the loosest suite. chart.xml carries data and formatting but no geometry, so every renderer computes the plot itself: LibreOffice picks its own axis scale, gap widths, label placement and legend metrics, and none of those are specified by the file. The structural things this suite actually guards are that the right number of bars/wedges appear, in the right order, with distinct series colours, inside the frame — a regression in any of those blows well past this figure. Judge it by the trend and by looking at the diff, not by the number alone."
     },
     {
       "id": "m5c",
       "fixture": "m5c-effects.pptx",
       "maxDiffRatio": 0.02,
-      "reason": "Gradients, alpha compositing and the outer shadow all render, and this suite now sits near 0.1%. The remaining budget is for the Gaussian blur radius, which LibreOffice and a browser compute differently \u2014 matching it exactly would mean matching its implementation. Note what this tolerance can and cannot catch: an effect vanishing entirely only moves the figure by about half a percent, so the real guard against that is the unit tests in layout::tests, which assert the SetShadow command and its scope directly. Pixel tolerance is the wrong instrument for 'did this feature stop working'."
+      "reason": "Gradients, alpha compositing and the outer shadow all render, and this suite now sits near 0.1%. The remaining budget is for the Gaussian blur radius, which LibreOffice and a browser compute differently — matching it exactly would mean matching its implementation. Note what this tolerance can and cannot catch: an effect vanishing entirely only moves the figure by about half a percent, so the real guard against that is the unit tests in layout::tests, which assert the SetShadow command and its scope directly. Pixel tolerance is the wrong instrument for 'did this feature stop working'."
+    },
+    {
+      "id": "m5d",
+      "fixture": "m5d-gradient-text.pptx",
+      "maxDiffRatio": 0.05,
+      "reason": "A gradient-filled title on a dark background. The fixture exists because a gradient on text was being anchored to the slide origin rather than to the glyphs, so the title rendered one flat colour. Large-point bold text on a dark ground is the worst case for antialiasing differences — every glyph edge contributes — which is what the budget is for. What it guards is that the colour *varies* across the title; a regression to a flat fill moves the figure well past this."
+    },
+    {
+      "id": "m5e",
+      "fixture": "m5e-hatch.pptx",
+      "maxDiffRatio": 0.05,
+      "reason": "Preset hatch fills, as a slide background and as a shape fill. Both previously collapsed to a flat blended colour. LibreOffice draws preset hatches faithfully, so this is a real oracle comparison. The budget is for tile phase: the repeat is quantised to the device grid, so a sub-pixel difference in where the pattern starts shifts every stripe on the slide and lights up a large fraction of it while looking identical to the eye. A hatch regressing to a flat fill blows well past this."
+    },
+    {
+      "id": "m5f",
+      "fixture": "m5f-tile.pptx",
+      "oracle": false,
+      "maxDiffRatio": 0.005,
+      "reason": "Tiled bitmap fills, deliberately NOT compared against the oracle. LibreOffice ignores <a:tile> and stretches the image to fill the shape — the exact bug this fixture exists to catch. Diffing against it would invert the test: a correct repeating render scores ~4% while a regression back to stretching would score near zero, so the suite would pass loudest when the feature was broken. It compares against a reviewed reference instead, which catches regressions without pretending to verify fidelity. Fidelity here is argued from the spec and asserted in layout::paint::tests (scale and offset survive into the display list) — and the tolerance is tight because our own output should be deterministic."
     }
   ]
 }

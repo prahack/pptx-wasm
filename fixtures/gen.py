@@ -558,6 +558,140 @@ def gen_m5d() -> None:
     save(deck, "m5d-gradient-text")
 
 
+# --------------------------------------------------------------------------- m5e
+
+def gen_m5e() -> None:
+    """A pattern (hatch) fill as a slide background.
+
+    From a real deck: a slide background set to a fine hatch rendered as a flat colour,
+    because the pattern was being averaged down to a single blended colour instead of
+    drawn. The failure is quiet — the slide still looks plausible — so it needs a fixture.
+
+    LibreOffice renders preset hatches faithfully, so this suite is oracle-checked.
+    """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+
+    deck = new_deck()
+    slide = blank(deck)
+
+    # <a:pattFill> written directly — python-pptx has no API for it.
+    bg = slide.background.fill
+    bg.solid()
+    bg_pr = bg._xPr
+    for child in list(bg_pr):
+        if child.tag == qn("a:solidFill"):
+            bg_pr.remove(child)
+    patt = etree.SubElement(bg_pr, qn("a:pattFill"))
+    patt.set("prst", "ltUpDiag")
+    fg = etree.SubElement(patt, qn("a:fgClr"))
+    etree.SubElement(fg, qn("a:srgbClr")).set("val", "C8CEDA")
+    bgc = etree.SubElement(patt, qn("a:bgClr"))
+    etree.SubElement(bgc, qn("a:srgbClr")).set("val", "F2F4F7")
+
+    # An outlined, unfilled box, so the background hatch is also seen through a clip.
+    outlined = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(1.0), Inches(1.2), Inches(5.0), Inches(3.0)
+    )
+    outlined.fill.background()
+    outlined.line.color.rgb = RGBColor(0x33, 0x33, 0x33)
+    outlined.line.width = Pt(1)
+    outlined.text_frame.text = ""
+
+    # A second hatch, this time as a shape fill rather than a background.
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(7.0), Inches(1.2), Inches(5.0), Inches(3.0)
+    )
+    shape.line.fill.background()
+    sp_pr = shape.fill._xPr
+    for child in list(sp_pr):
+        if child.tag in (qn("a:solidFill"), qn("a:noFill")):
+            sp_pr.remove(child)
+    patt2 = etree.SubElement(sp_pr, qn("a:pattFill"))
+    patt2.set("prst", "pct25")
+    fg2 = etree.SubElement(patt2, qn("a:fgClr"))
+    etree.SubElement(fg2, qn("a:srgbClr")).set("val", "D65233")
+    bg2 = etree.SubElement(patt2, qn("a:bgClr"))
+    etree.SubElement(bg2, qn("a:srgbClr")).set("val", "FFFFFF")
+
+    label = slide.shapes.add_textbox(Inches(1.0), Inches(4.6), Inches(11.0), Inches(0.8))
+    run = label.text_frame.paragraphs[0].add_run()
+    run.text = "background = ltUpDiag hatch     right box = pct25 hatch"
+    run.font.size = Pt(20)
+    run.font.color.rgb = RGBColor(0x22, 0x22, 0x22)
+
+    save(deck, "m5e-hatch")
+
+
+# --------------------------------------------------------------------------- m5f
+
+def _tile_png(size: int = 24) -> io.BytesIO:
+    """A small tile whose pattern only survives if it is actually repeated.
+
+    One diagonal stroke corner-to-corner: tiled, it reads as continuous stripes across the
+    shape; stretched, it degenerates to a single thick band. That is the whole point of
+    the fixture, so the failure is obvious rather than subtle.
+    """
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (size, size), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+    d.line([0, size, size, 0], fill=(214, 82, 51), width=max(2, size // 8))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+def gen_m5f() -> None:
+    """A tiled bitmap fill — <a:tile> rather than <a:stretch>.
+
+    Not oracle-checked, and the reason matters: LibreOffice ignores <a:tile> and stretches
+    the image instead, which is precisely the bug this fixture exists to catch. Diffing
+    against it would mean a *correct* render scores worse than a broken one, so the suite
+    compares against a reviewed reference. See suites.json.
+    """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+
+    deck = new_deck()
+    slide = blank(deck)
+
+    pic = slide.shapes.add_picture(
+        _tile_png(24), Inches(1.0), Inches(1.2), Inches(5.0), Inches(3.0)
+    )
+    blip_fill = pic._element.blipFill
+    for child in list(blip_fill):
+        if child.tag in (qn("a:stretch"), qn("a:srcRect")):
+            blip_fill.remove(child)
+    tile = etree.SubElement(blip_fill, qn("a:tile"))
+    for k, v in (("tx", "0"), ("ty", "0"), ("sx", "100000"), ("sy", "100000")):
+        tile.set(k, v)
+    tile.set("algn", "tl")
+
+    # The same tile at half scale and offset, so a regression that drops sx/sy or tx/ty
+    # while keeping the repeat is still visible.
+    pic2 = slide.shapes.add_picture(
+        _tile_png(24), Inches(7.0), Inches(1.2), Inches(5.0), Inches(3.0)
+    )
+    bf2 = pic2._element.blipFill
+    for child in list(bf2):
+        if child.tag in (qn("a:stretch"), qn("a:srcRect")):
+            bf2.remove(child)
+    tile2 = etree.SubElement(bf2, qn("a:tile"))
+    for k, v in (("tx", "114300"), ("ty", "0"), ("sx", "50000"), ("sy", "50000")):
+        tile2.set(k, v)
+    tile2.set("algn", "tl")
+
+    label = slide.shapes.add_textbox(Inches(1.0), Inches(4.6), Inches(11.0), Inches(0.8))
+    run = label.text_frame.paragraphs[0].add_run()
+    run.text = "left = tile at 100%     right = tile at 50%, offset 9pt"
+    run.font.size = Pt(20)
+    run.font.color.rgb = RGBColor(0x22, 0x22, 0x22)
+
+    save(deck, "m5f-tile")
+
+
 # --------------------------------------------------------------------------- m6
 
 def gen_m6() -> None:
@@ -644,6 +778,8 @@ GENERATORS = {
     "m5b": gen_m5b,
     "m5c": gen_m5c,
     "m5d": gen_m5d,
+    "m5e": gen_m5e,
+    "m5f": gen_m5f,
     "m6": gen_m6,
     "bench": gen_bench,
 }

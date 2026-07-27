@@ -419,12 +419,40 @@ fn emit_picture(
             });
         }
     }
-    dl.push(Command::DrawImage {
-        image: id,
-        src,
-        dst: box_rect,
-        opacity: pic.alpha.clamp(0.0, 1.0),
-    });
+    match pic.mode {
+        crate::model::fill::BlipMode::Tile {
+            scale_x,
+            scale_y,
+            offset_x,
+            offset_y,
+        } => {
+            // A tiling picture is a fill, not a single placement, so it goes through
+            // FillPath — DrawImage has no way to say "repeat".
+            dl.push(Command::FillPath {
+                path: Path::rect(box_rect),
+                paint: Paint::Image {
+                    image: id,
+                    src,
+                    opacity: pic.alpha.clamp(0.0, 1.0),
+                    tile: Some(crate::dl::Tile {
+                        scale_x,
+                        scale_y,
+                        offset_x: emu::to_pt(offset_x),
+                        offset_y: emu::to_pt(offset_y),
+                    }),
+                },
+                rule: crate::dl::FillRule::NonZero,
+            });
+        }
+        crate::model::fill::BlipMode::Stretch => {
+            dl.push(Command::DrawImage {
+                image: id,
+                src,
+                dst: box_rect,
+                opacity: pic.alpha.clamp(0.0, 1.0),
+            });
+        }
+    }
     if clipped {
         dl.push(Command::Restore);
     }

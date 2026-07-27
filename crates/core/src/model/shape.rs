@@ -130,7 +130,7 @@ impl Placeholder {
 }
 
 /// A `<p:pic>` — a picture and its crop.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Picture {
     /// Relationship id of the image part.
     pub embed_id: Option<String>,
@@ -138,8 +138,23 @@ pub struct Picture {
     pub src_rect: [f32; 4],
     /// `<a:alphaModFix>` transparency, 0..1.
     pub alpha: f32,
+    /// Stretch or tile. A picture can carry a tiled fill just as a shape can, and
+    /// dropping it turns a repeating texture into one stretched copy.
+    pub mode: super::fill::BlipMode,
     /// Alternative text, exposed to the accessibility layer.
     pub alt_text: String,
+}
+
+impl Default for Picture {
+    fn default() -> Self {
+        Picture {
+            embed_id: None,
+            src_rect: [0.0; 4],
+            alpha: 1.0,
+            mode: super::fill::BlipMode::Stretch,
+            alt_text: String::new(),
+        }
+    }
 }
 
 /// Content of a `<p:graphicFrame>`. Diagrams and OLE objects are recognised but not

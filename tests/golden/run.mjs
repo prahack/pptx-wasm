@@ -13,6 +13,10 @@
  * still renders every slide and diffs against the last accepted output in
  * `tests/golden/out/reference/`. That catches regressions, which is most of the value,
  * without pretending it has verified fidelity — and it says so.
+ *
+ * A suite can also set `"oracle": false` in suites.json, for features LibreOffice renders
+ * *wrongly* — there, diffing against it would score a correct render worse than a broken
+ * one. Those compare against a reviewed, committed reference in `tests/golden/reference/`.
  */
 
 import { execFile, spawn } from 'node:child_process';
@@ -25,7 +29,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -38,7 +42,15 @@ import { BASE, ensureServer } from './server.mjs';
 const exec = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'out');
-const REFERENCE = join(OUT, 'reference');
+// Two different kinds of "reference", deliberately in different places.
+//   SELF_REF  scratch, under the gitignored out/ — used when LibreOffice is missing, so
+//             a run still detects regressions on a machine without the full toolchain.
+//   REVIEWED  committed — the reference for suites that set `oracle: false` because the
+//             oracle renders the feature wrongly. This one has to be in the repository:
+//             if it were gitignored, a fresh checkout would re-record whatever the code
+//             currently does and the suite would assert nothing at all.
+const SELF_REF = join(OUT, 'reference');
+const REVIEWED = join(HERE, 'reference');
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--suite='))?.slice('--suite='.length);
 const update = args.includes('--update');
@@ -219,7 +231,8 @@ async function main() {
   mkdirSync(join(OUT, 'actual'), { recursive: true });
   mkdirSync(join(OUT, 'diff'), { recursive: true });
   mkdirSync(join(OUT, 'trace'), { recursive: true });
-  mkdirSync(REFERENCE, { recursive: true });
+  mkdirSync(SELF_REF, { recursive: true });
+  mkdirSync(REVIEWED, { recursive: true });
 
   const results = [];
 
@@ -230,8 +243,15 @@ async function main() {
       const threshold = suite.threshold ?? config.defaults.threshold;
       const limit = suite.maxDiffRatio ?? config.defaults.maxDiffRatio;
 
+      // A suite can opt out of the oracle when LibreOffice renders the feature wrongly,
+      // in which case a pixel diff against it is worse than no test at all — it passes
+      // for the wrong reason and would keep passing through a regression. Such a suite
+      // compares against a reviewed reference instead: that catches regressions, which
+      // is the part the oracle was providing anyway. `reason` in suites.json says why.
+      const suiteHasOracle = haveOracle && suite.oracle !== false;
+
       let goldens = [];
-      if (haveOracle) {
+      if (suiteHasOracle) {
         try {
           goldens = await renderFixture(suite.fixture, { width, height, tools });
         } catch (e) {
@@ -241,7 +261,9 @@ async function main() {
       }
 
       // Without the oracle we do not know the slide count up front, so ask the viewer.
-      const slideCount = haveOracle ? goldens.length : await countSlides(browser, suite.fixture);
+      const slideCount = suiteHasOracle
+        ? goldens.length
+        : await countSlides(browser, suite.fixture);
 
       for (let slide = 0; slide < slideCount; slide++) {
         const label = `${suite.id}/slide${slide + 1}`;
@@ -267,18 +289,22 @@ async function main() {
           continue;
         }
 
-        const referencePath = haveOracle
+        const referencePath = suiteHasOracle
           ? goldens[slide]
-          : join(REFERENCE, `${suite.id}-${slide + 1}.png`);
+          : join(suite.oracle === false ? REVIEWED : SELF_REF, `${suite.id}-${slide + 1}.png`);
 
         if (update || !existsSync(referencePath)) {
-          if (!haveOracle) {
+          if (!suiteHasOracle) {
             writeFileSync(referencePath, rendered.buffer);
             results.push({
               suite: suite.id,
               slide: slide + 1,
               status: 'recorded',
-              detail: 'reference written',
+              detail:
+                suite.oracle === false
+                  ? `written to ${relative(ROOT, referencePath)} — review it by eye and commit it; ` +
+                    'until then this suite asserts nothing'
+                  : 'reference written',
             });
             continue;
           }
@@ -313,7 +339,11 @@ async function main() {
           status: pass ? 'pass' : 'fail',
           ratio: cmp.ratio,
           limit,
-          detail: `${(cmp.ratio * 100).toFixed(3)}% differ (limit ${(limit * 100).toFixed(2)}%)`,
+          detail:
+            `${(cmp.ratio * 100).toFixed(3)}% differ (limit ${(limit * 100).toFixed(2)}%)` +
+            // Say so on every line, not once in a footnote: a number compared against our
+            // own past output means something weaker than one compared against the oracle.
+            (suiteHasOracle ? '' : '  [vs recorded reference, not the oracle]'),
         });
         process.stdout.write(pass ? '.' : 'F');
         void label;

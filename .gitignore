@@ -13,3 +13,4 @@
 /examples/*/dist
 /examples/*/public/deck.pptx
 *.tgz
+/fixtures/__pycache__

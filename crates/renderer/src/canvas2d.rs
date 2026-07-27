@@ -13,8 +13,8 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, CanvasWindingRule, HtmlImageElement, Path2d};
 
 use pptx_core::dl::{
-    Command, DisplayList, FillRule, Gradient, ImageId, LineCap, LineJoin, Paint, Path, PathVerb,
-    Point, Shadow, Stroke, TextRun, Transform,
+    Color, Command, DisplayList, FillRule, Gradient, HatchPattern, ImageId, LineCap, LineJoin,
+    Paint, Path, PathVerb, Point, Shadow, Stroke, TextRun, Tile, Transform,
 };
 
 use crate::{ImageSource, Renderer};
@@ -68,6 +68,7 @@ impl ImageSource for DecodedImages {
 enum Style {
     Css(String),
     Gradient(web_sys::CanvasGradient),
+    Pattern(web_sys::CanvasPattern),
 }
 
 #[derive(Debug)]
@@ -182,6 +183,7 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
         match style {
             Style::Css(s) => self.ctx.set_fill_style_str(s),
             Style::Gradient(g) => self.ctx.set_fill_style_canvas_gradient(g),
+            Style::Pattern(p) => self.ctx.set_fill_style_canvas_pattern(p),
         }
         Ok(())
     }
@@ -190,7 +192,177 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
         match style {
             Style::Css(s) => self.ctx.set_stroke_style_str(s),
             Style::Gradient(g) => self.ctx.set_stroke_style_canvas_gradient(g),
+            Style::Pattern(p) => self.ctx.set_stroke_style_canvas_pattern(p),
         }
+        Ok(())
+    }
+
+    /// Rasterises a hatch tile and wraps it in a repeating canvas pattern.
+    ///
+    /// The tile is drawn at the current device scale so the hatch stays crisp when zoomed,
+    /// then the pattern is given the inverse transform so it lands at the right size in
+    /// user space. Drawing it at a fixed size instead makes the hatch coarsen visibly as
+    /// you zoom in.
+    fn hatch_style(
+        &self,
+        pattern: HatchPattern,
+        foreground: Color,
+        background: Color,
+    ) -> Result<Style, Error> {
+        // 8pt is the period OOXML's line hatches are defined on.
+        const PERIOD_PT: f64 = 8.0;
+        let scale = (self.current.approx_scale() as f64).clamp(0.25, 8.0);
+        let size = (PERIOD_PT * scale).round().max(2.0);
+
+        let canvas =
+            web_sys::OffscreenCanvas::new(size as u32, size as u32).map_err(Error::from)?;
+        let tile = canvas
+            .get_context("2d")
+            .map_err(Error::from)?
+            .ok_or_else(|| Error::Js("no 2d context for the hatch tile".into()))?
+            .unchecked_into::<web_sys::OffscreenCanvasRenderingContext2d>();
+
+        if !background.is_transparent() {
+            tile.set_fill_style_str(&background.to_css());
+            tile.fill_rect(0.0, 0.0, size, size);
+        }
+        tile.set_stroke_style_str(&foreground.to_css());
+        tile.set_fill_style_str(&foreground.to_css());
+
+        let heavy_width = (size / 4.0).max(1.0);
+        let light_width = (size / 8.0).max(1.0);
+
+        match pattern {
+            HatchPattern::Percent(p) => {
+                // A dot screen: the dot's area carries the coverage.
+                let coverage = (p as f64 / 100.0).clamp(0.0, 1.0);
+                let radius = (size * size * coverage / std::f64::consts::PI).sqrt() / 2.0;
+                if radius > 0.0 {
+                    tile.begin_path();
+                    let _ = tile.arc(size / 2.0, size / 2.0, radius, 0.0, std::f64::consts::TAU);
+                    tile.fill();
+                    // Quarter dots at the corners so the screen reads as even when tiled.
+                    for (cx, cy) in [(0.0, 0.0), (size, 0.0), (0.0, size), (size, size)] {
+                        tile.begin_path();
+                        let _ = tile.arc(cx, cy, radius, 0.0, std::f64::consts::TAU);
+                        tile.fill();
+                    }
+                }
+            }
+            HatchPattern::Horizontal { heavy } => {
+                tile.set_line_width(if heavy { heavy_width } else { light_width });
+                tile.begin_path();
+                tile.move_to(0.0, size / 2.0);
+                tile.line_to(size, size / 2.0);
+                tile.stroke();
+            }
+            HatchPattern::Vertical { heavy } => {
+                tile.set_line_width(if heavy { heavy_width } else { light_width });
+                tile.begin_path();
+                tile.move_to(size / 2.0, 0.0);
+                tile.line_to(size / 2.0, size);
+                tile.stroke();
+            }
+            HatchPattern::DiagonalUp { heavy } | HatchPattern::DiagonalDown { heavy } => {
+                let up = matches!(pattern, HatchPattern::DiagonalUp { .. });
+                tile.set_line_width(if heavy { heavy_width } else { light_width });
+                tile.begin_path();
+                // Drawn three times so the stroke is continuous across tile seams.
+                for offset in [-size, 0.0, size] {
+                    if up {
+                        tile.move_to(offset, size);
+                        tile.line_to(offset + size, 0.0);
+                    } else {
+                        tile.move_to(offset, 0.0);
+                        tile.line_to(offset + size, size);
+                    }
+                }
+                tile.stroke();
+            }
+            HatchPattern::Grid { heavy } => {
+                tile.set_line_width(if heavy { heavy_width } else { light_width });
+                tile.begin_path();
+                tile.move_to(0.0, size / 2.0);
+                tile.line_to(size, size / 2.0);
+                tile.move_to(size / 2.0, 0.0);
+                tile.line_to(size / 2.0, size);
+                tile.stroke();
+            }
+            HatchPattern::DiagonalGrid { heavy } => {
+                tile.set_line_width(if heavy { heavy_width } else { light_width });
+                tile.begin_path();
+                for offset in [-size, 0.0, size] {
+                    tile.move_to(offset, size);
+                    tile.line_to(offset + size, 0.0);
+                    tile.move_to(offset, 0.0);
+                    tile.line_to(offset + size, size);
+                }
+                tile.stroke();
+            }
+        }
+
+        let created = self
+            .ctx
+            .create_pattern_with_offscreen_canvas(&canvas, "repeat")
+            .map_err(Error::from)?
+            .ok_or_else(|| Error::Js("could not create the hatch pattern".into()))?;
+        Ok(Style::Pattern(created))
+    }
+
+    /// Draws a tiled bitmap fill by repeating the image across the path's bounds.
+    ///
+    /// `createPattern` would be the obvious tool, but its `setTransform` binding takes a
+    /// legacy `SVGMatrix` that needs an SVG element to construct — and a pattern without a
+    /// transform cannot honour OOXML's tile scale or offset. Drawing the repeats is
+    /// exact, and it also lets `srcRect` cropping apply per tile, which a pattern cannot
+    /// express at all.
+    fn draw_tiled_image(
+        &self,
+        handle: &CanvasImage,
+        src: pptx_core::dl::Rect,
+        bounds: pptx_core::dl::Rect,
+        tile: &Tile,
+        opacity: f32,
+    ) -> Result<(), Error> {
+        let (iw, ih) = image_size(handle);
+        if iw <= 0.0 || ih <= 0.0 || bounds.is_empty() {
+            return Ok(());
+        }
+        // One tile is the cropped region at its natural size, scaled by the tile factors.
+        let tw = (iw * src.w as f64 * tile.scale_x.max(0.01) as f64).max(1.0);
+        let th = (ih * src.h as f64 * tile.scale_y.max(0.01) as f64).max(1.0);
+
+        let cols = ((bounds.w as f64 / tw).ceil() as i64 + 1).max(1);
+        let rows = ((bounds.h as f64 / th).ceil() as i64 + 1).max(1);
+        // A pathological tile scale could otherwise ask for millions of draw calls.
+        const MAX_TILES: i64 = 4096;
+        if cols.saturating_mul(rows) > MAX_TILES {
+            log::warn!(
+                "tiled fill would need {}x{} tiles; drawing one stretched copy",
+                cols,
+                rows
+            );
+            return self.draw_image(handle, src, bounds);
+        }
+
+        let prev = self.ctx.global_alpha();
+        self.ctx.set_global_alpha(opacity.clamp(0.0, 1.0) as f64);
+        // The offset may be negative, so start one tile before the bounds and let the
+        // clip trim the overhang.
+        let origin_x = bounds.x as f64 + (tile.offset_x as f64 % tw) - tw;
+        let origin_y = bounds.y as f64 + (tile.offset_y as f64 % th) - th;
+        for row in 0..=rows {
+            for col in 0..=cols {
+                let dst = pptx_core::dl::Rect::new(
+                    (origin_x + col as f64 * tw) as f32,
+                    (origin_y + row as f64 * th) as f32,
+                    tw as f32,
+                    th as f32,
+                );
+                self.draw_image(handle, src, dst)?;
+            }
+        }
+        self.ctx.set_global_alpha(prev);
         Ok(())
     }
 
@@ -238,8 +410,15 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
                     Style::Gradient(grad)
                 }
             },
-            // An image paint on a path is drawn as a clipped image rather than a canvas
-            // pattern, so `srcRect` cropping works the same way it does for a picture.
+            Paint::Hatch {
+                pattern,
+                foreground,
+                background,
+            } => self.hatch_style(*pattern, *foreground, *background)?,
+            // Image fills never reach here: `fill` draws them directly so that `srcRect`
+            // cropping and tile offsets can be honoured, neither of which a canvas
+            // pattern can express. This arm only covers an image paint on a *stroke*,
+            // which nothing currently produces.
             Paint::Image { .. } => Style::Css("transparent".to_string()),
         })
     }
@@ -253,26 +432,56 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
 
     fn fill(&mut self, path: &Path, paint: &Paint, rule: FillRule) -> Result<(), Error> {
         let p2d = self.build_path(path)?;
+
+        // Image fills are drawn rather than turned into a canvas pattern, because a
+        // pattern cannot express `srcRect` cropping, and web-sys cannot transform one to
+        // honour a tile's scale and offset.
         if let Paint::Image {
             image,
             src,
             opacity,
+            tile,
         } = paint
         {
             let Some(handle) = self.images.get(*image) else {
                 return Ok(());
             };
-            let b = path.bounds();
+            let bounds = path.bounds();
             self.ctx.save();
             self.ctx
                 .clip_with_path_2d_and_winding(&p2d, Self::winding(rule));
-            let prev = self.ctx.global_alpha();
-            self.ctx.set_global_alpha((*opacity).clamp(0.0, 1.0) as f64);
-            self.draw_image(&handle, *src, b)?;
-            self.ctx.set_global_alpha(prev);
+            match tile {
+                Some(t) => self.draw_tiled_image(&handle, *src, bounds, t, *opacity)?,
+                None => {
+                    let prev = self.ctx.global_alpha();
+                    self.ctx.set_global_alpha((*opacity).clamp(0.0, 1.0) as f64);
+                    self.draw_image(&handle, *src, bounds)?;
+                    self.ctx.set_global_alpha(prev);
+                }
+            }
             self.ctx.restore();
             return Ok(());
         }
+
+        if matches!(paint, Paint::Hatch { .. }) {
+            // A canvas pattern maps one tile pixel to one *user-space* unit, and web-sys
+            // cannot transform a pattern. So the hatch is filled in device space instead:
+            // the tile is rasterised at device resolution — which keeps it crisp at any
+            // zoom — and the path is transformed to match rather than the pattern.
+            let style = self.paint_style(paint)?;
+            let mut device_path = path.clone();
+            device_path.transform(&self.current);
+            let device_p2d = self.build_path(&device_path)?;
+            self.ctx
+                .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                .map_err(Error::from)?;
+            self.set_fill(&style)?;
+            self.ctx
+                .fill_with_path_2d_and_winding(&device_p2d, Self::winding(rule));
+            self.apply_transform(&self.current)?;
+            return Ok(());
+        }
+
         let style = self.paint_style(paint)?;
         self.set_fill(&style)?;
         self.ctx
@@ -343,10 +552,7 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
         dst: pptx_core::dl::Rect,
     ) -> Result<(), Error> {
         // `src` is normalised; scale it by the decoded image's real pixel size.
-        let (iw, ih) = match handle {
-            CanvasImage::Element(e) => (e.natural_width() as f64, e.natural_height() as f64),
-            CanvasImage::Bitmap(b) => (b.width() as f64, b.height() as f64),
-        };
+        let (iw, ih) = image_size(handle);
         if iw <= 0.0 || ih <= 0.0 {
             return Ok(());
         }
@@ -528,6 +734,14 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
             .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
             .map_err(Error::from)?;
         Ok(())
+    }
+}
+
+/// Natural pixel size of a decoded image.
+fn image_size(handle: &CanvasImage) -> (f64, f64) {
+    match handle {
+        CanvasImage::Element(e) => (e.natural_width() as f64, e.natural_height() as f64),
+        CanvasImage::Bitmap(b) => (b.width() as f64, b.height() as f64),
     }
 }
 
