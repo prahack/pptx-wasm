@@ -13,6 +13,9 @@ pub struct EvaluatedPath {
     pub path: Path,
     pub fill: bool,
     pub stroke: bool,
+    /// How this face shades the shape's fill. `Normal` for everything except the faces
+    /// of 3-D-looking presets and custom paths that ask for it.
+    pub shade: PathFillMode,
 }
 
 /// Evaluates a shape's geometry inside a `w` x `h` point box at the origin.
@@ -25,19 +28,23 @@ pub fn evaluate(geometry: &Geometry, w: f32, h: f32) -> Vec<EvaluatedPath> {
             preset: name,
             adjustments,
         } => {
-            let path = preset::build(name, w, h, adjustments);
             let line_like = geometry.is_line_like();
-            vec![EvaluatedPath {
-                path,
-                fill: !line_like,
-                stroke: true,
-            }]
+            preset::faces(name, w, h, adjustments)
+                .into_iter()
+                .map(|f| EvaluatedPath {
+                    path: f.path,
+                    fill: !line_like,
+                    stroke: f.stroke,
+                    shade: f.fill,
+                })
+                .collect()
         }
         Geometry::Custom(c) => evaluate_custom(c, w, h),
         Geometry::None => vec![EvaluatedPath {
             path: Path::rect(Rect::new(0.0, 0.0, w, h)),
             fill: true,
             stroke: true,
+            shade: PathFillMode::Normal,
         }],
     }
 }
@@ -68,6 +75,7 @@ fn evaluate_custom(geom: &CustomGeometry, w: f32, h: f32) -> Vec<EvaluatedPath> 
         out.push(EvaluatedPath {
             path,
             fill: gp.fill_mode != PathFillMode::None,
+            shade: gp.fill_mode,
             stroke: gp.stroke,
         });
     }
@@ -78,6 +86,7 @@ fn evaluate_custom(geom: &CustomGeometry, w: f32, h: f32) -> Vec<EvaluatedPath> 
             path: Path::rect(Rect::new(0.0, 0.0, w, h)),
             fill: true,
             stroke: false,
+            shade: PathFillMode::Normal,
         });
     }
     out

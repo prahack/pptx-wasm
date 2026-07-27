@@ -12,9 +12,99 @@ use std::collections::HashMap;
 use std::f32::consts::PI;
 
 use crate::dl::{Path, Rect};
-use crate::model::geometry::default_adjustments;
+use crate::model::geometry::{default_adjustments, PathFillMode};
 
 /// Builds a preset shape's path in a box of `w` x `h` points with its origin at 0,0.
+/// One drawable face of a preset, with the shading DrawingML asks for.
+#[derive(Debug, Clone)]
+pub struct Face {
+    pub path: Path,
+    pub fill: PathFillMode,
+    pub stroke: bool,
+}
+
+/// A preset's faces, in paint order.
+///
+/// Almost every preset is one face painted with the shape's fill. The 3-D-looking ones are
+/// not: ECMA-376 gives `can` a `fill="lighten"` lid and `cube` a lightened top and a
+/// darkened side, so that one solid fill reads as a lit solid. Collapsing those to a
+/// single path is what made the lid and the top face come out unpainted — a white hole
+/// where the light face should be, which is far more visible than a shade being slightly
+/// off.
+pub fn faces(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Vec<Face> {
+    let adj = Adjustments::new(preset, adjustments);
+    let b = Builder { w, h, adj };
+    match preset {
+        "can" => {
+            let ry = b.can_ry();
+            let mut body = Path::new();
+            body.move_to(0.0, ry);
+            body.arc_to(w / 2.0, ry, w / 2.0, ry, PI, PI);
+            body.line_to(w, h - ry);
+            body.arc_to(w / 2.0, h - ry, w / 2.0, ry, 0.0, PI);
+            body.close();
+            let lid = Path::ellipse(Rect::new(0.0, 0.0, w, ry * 2.0));
+            vec![
+                Face {
+                    path: body,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+                Face {
+                    path: lid,
+                    fill: PathFillMode::Lighten,
+                    stroke: true,
+                },
+            ]
+        }
+        "cube" => {
+            let d = b.cube_d();
+            let (x4, y4) = (w - d, h - d);
+            let mut front = Path::new();
+            front
+                .move_to(0.0, d)
+                .line_to(0.0, h)
+                .line_to(x4, h)
+                .line_to(x4, d)
+                .close();
+            let mut top = Path::new();
+            top.move_to(0.0, d)
+                .line_to(d, 0.0)
+                .line_to(w, 0.0)
+                .line_to(x4, d)
+                .close();
+            let mut side = Path::new();
+            side.move_to(x4, d)
+                .line_to(w, 0.0)
+                .line_to(w, y4)
+                .line_to(x4, h)
+                .close();
+            vec![
+                Face {
+                    path: front,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+                Face {
+                    path: top,
+                    fill: PathFillMode::Lighten,
+                    stroke: true,
+                },
+                Face {
+                    path: side,
+                    fill: PathFillMode::Darken,
+                    stroke: true,
+                },
+            ]
+        }
+        _ => vec![Face {
+            path: build(preset, w, h, adjustments),
+            fill: PathFillMode::Normal,
+            stroke: true,
+        }],
+    }
+}
+
 pub fn build(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Path {
     let adj = Adjustments::new(preset, adjustments);
     let b = Builder { w, h, adj };
@@ -126,6 +216,17 @@ impl Adjustments {
     fn frac(&self, name: &str, fallback: f64) -> f32 {
         let raw = self.values.get(name).copied().unwrap_or(fallback);
         (raw / 100_000.0).clamp(0.0, 1.0) as f32
+    }
+
+    /// Adjustment over 50000 rather than 100000.
+    ///
+    /// The star presets scale their inner radius by `*/ swd2 a 50000`, so `adj="19098"`
+    /// on `star5` means 0.38197 — the golden-ratio waist of a five-pointed star — not
+    /// 0.19098. Reading it as a hundred-thousandth halves the waist and renders the star
+    /// as five thin spikes.
+    fn ratio_50k(&self, name: &str, fallback: f64) -> f32 {
+        let raw = self.values.get(name).copied().unwrap_or(fallback);
+        (raw / 50_000.0).clamp(0.0, 1.0) as f32
     }
 
     /// Adjustment kept as a signed fraction (callout offsets go negative).
@@ -251,16 +352,44 @@ impl Builder {
                 p
             }
             "pentagon" => self.regular_polygon(5, -PI / 2.0),
-            "hexagon" => self.regular_polygon(6, 0.0),
+            "hexagon" => {
+                // Spec: the flat top and bottom edges sit *on* the box, and the slanted
+                // ends are inset by the smaller side — not by the width. A regular
+                // hexagon in the box's ellipse leaves a visible band at top and bottom.
+                let x1 = (self.adj.frac("adj", 25000.0) * self.ss()).min(w / 2.0);
+                let mut p = Path::new();
+                p.move_to(0.0, h / 2.0)
+                    .line_to(x1, 0.0)
+                    .line_to(w - x1, 0.0)
+                    .line_to(w, h / 2.0)
+                    .line_to(w - x1, h)
+                    .line_to(x1, h)
+                    .close();
+                p
+            }
             "heptagon" => self.regular_polygon(7, -PI / 2.0),
-            "octagon" => self.regular_polygon(8, PI / 8.0),
-            "decagon" => self.regular_polygon(10, 0.0),
-            "star4" => self.star(4, self.adj.frac("adj", 12500.0)),
-            "star5" => self.star(5, self.adj.frac("adj", 19098.0)),
-            "star6" => self.star(6, self.adj.frac("adj", 28868.0)),
-            "star8" => self.star(8, self.adj.frac("adj", 37500.0)),
-            "star10" => self.star(10, self.adj.frac("adj", 42533.0)),
-            "star12" => self.star(12, self.adj.frac("adj", 37500.0)),
+            "octagon" => {
+                // Also box-filling: the corner cut is the smaller side times the adjust.
+                let x1 = (self.adj.frac("adj", 29289.0) * self.ss()).min(w.min(h) / 2.0);
+                let mut p = Path::new();
+                p.move_to(0.0, x1)
+                    .line_to(x1, 0.0)
+                    .line_to(w - x1, 0.0)
+                    .line_to(w, x1)
+                    .line_to(w, h - x1)
+                    .line_to(w - x1, h)
+                    .line_to(x1, h)
+                    .line_to(0.0, h - x1)
+                    .close();
+                p
+            }
+            "decagon" => self.regular_polygon(10, PI / 10.0),
+            "star4" => self.star(4, self.adj.ratio_50k("adj", 12500.0)),
+            "star5" => self.star(5, self.adj.ratio_50k("adj", 19098.0)),
+            "star6" => self.star(6, self.adj.ratio_50k("adj", 28868.0)),
+            "star8" => self.star(8, self.adj.ratio_50k("adj", 37500.0)),
+            "star10" => self.star(10, self.adj.ratio_50k("adj", 42533.0)),
+            "star12" => self.star(12, self.adj.ratio_50k("adj", 37500.0)),
             "plus" | "cross" => {
                 let a = self.adj.frac("adj", 25000.0);
                 let dx = w * a;
@@ -287,7 +416,7 @@ impl Builder {
             "downArrow" => self.arrow_v(false),
             "leftRightArrow" => {
                 let shaft = self.adj.frac("adj1", 50000.0) * h;
-                let head = (self.adj.frac("adj2", 50000.0) * w).min(w / 2.0);
+                let head = (self.adj.frac("adj2", 50000.0) * self.ss()).min(w / 2.0);
                 let y0 = (h - shaft) / 2.0;
                 let y1 = y0 + shaft;
                 let mut p = Path::new();
@@ -306,7 +435,7 @@ impl Builder {
             }
             "upDownArrow" => {
                 let shaft = self.adj.frac("adj1", 50000.0) * w;
-                let head = (self.adj.frac("adj2", 50000.0) * h).min(h / 2.0);
+                let head = (self.adj.frac("adj2", 50000.0) * self.ss()).min(h / 2.0);
                 let x0 = (w - shaft) / 2.0;
                 let x1 = x0 + shaft;
                 let mut p = Path::new();
@@ -344,20 +473,21 @@ impl Builder {
                 }
                 p
             }
+            // `can` and `cube` are built by `faces()`, which is what carries their
+            // per-face shading. Reaching them here means someone asked for a single
+            // path, so give the silhouette — the shape without its 3-D shading.
             "can" => {
-                let ry = (self.adj.frac("adj", 25000.0) * h / 2.0).min(h / 2.0);
+                let ry = self.can_ry();
                 let mut p = Path::new();
-                // Body, then the visible top ellipse as a second subpath.
                 p.move_to(0.0, ry);
                 p.arc_to(w / 2.0, ry, w / 2.0, ry, PI, PI);
                 p.line_to(w, h - ry);
                 p.arc_to(w / 2.0, h - ry, w / 2.0, ry, 0.0, PI);
                 p.close();
-                let top = Path::ellipse(Rect::new(0.0, 0.0, w, ry * 2.0));
-                append(p, &top)
+                p
             }
             "cube" => {
-                let d = self.adj.frac("adj", 25000.0) * self.ss();
+                let d = self.cube_d();
                 let mut p = Path::new();
                 p.move_to(0.0, d)
                     .line_to(d, 0.0)
@@ -366,14 +496,7 @@ impl Builder {
                     .line_to(w - d, h)
                     .line_to(0.0, h)
                     .close();
-                let mut edges = Path::new();
-                edges
-                    .move_to(0.0, d)
-                    .line_to(w - d, d)
-                    .line_to(w, 0.0)
-                    .move_to(w - d, d)
-                    .line_to(w - d, h);
-                append(p, &edges)
+                p
             }
             "donut" | "noSmoking" => {
                 let t = self.adj.frac("adj", 25000.0) * self.ss();
@@ -641,47 +764,83 @@ impl Builder {
     }
 
     /// A regular n-gon inscribed in the box, starting at `start` radians.
-    fn regular_polygon(&self, n: usize, start: f32) -> Path {
-        let (cx, cy) = (self.w / 2.0, self.h / 2.0);
-        let (rx, ry) = (self.w / 2.0, self.h / 2.0);
+    /// Half-height of `can`'s elliptical lid: `*/ ss a 200000`.
+    fn can_ry(&self) -> f32 {
+        (self.adj.frac("adj", 25000.0) * self.ss() / 2.0).min(self.h / 2.0)
+    }
+
+    /// Depth of `cube`'s projection: `*/ ss a 100000`.
+    fn cube_d(&self) -> f32 {
+        (self.adj.frac("adj", 25000.0) * self.ss()).min(self.w.min(self.h))
+    }
+
+    /// Closes a path through unit-circle points, scaled so it exactly fills the box.
+    ///
+    /// ECMA-376 does this with a precomputed `hf`/`vf` pair per preset — `pentagon`'s
+    /// `hf="105146"` is 1/cos(18°), and `star5`'s `vf="110557"` is 2/(1+sin(54°)) — plus a
+    /// shifted vertical centre for the shapes that are not symmetric about it. Measuring
+    /// the extent gives the same numbers without a table of constants to mistype, and it
+    /// stays right for a preset whose factors nobody looked up.
+    ///
+    /// A polygon inscribed in the box's *ellipse* is the tempting shortcut and is wrong:
+    /// a pentagon's widest points are at ±18°, so it would sit 5% narrow, and a five-
+    /// pointed star would float 10% short of the bottom edge.
+    fn fill_box(&self, pts: &[(f32, f32)]) -> Path {
         let mut p = Path::new();
-        for i in 0..n {
-            let t = start + (i as f32) * 2.0 * PI / n as f32;
-            let (x, y) = (cx + rx * t.cos(), cy + ry * t.sin());
+        let (mut x0, mut y0) = (f32::INFINITY, f32::INFINITY);
+        let (mut x1, mut y1) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+        for &(x, y) in pts {
+            x0 = x0.min(x);
+            x1 = x1.max(x);
+            y0 = y0.min(y);
+            y1 = y1.max(y);
+        }
+        // A degenerate set would divide by zero; fall back to leaving it at the origin.
+        let sx = if x1 > x0 { self.w / (x1 - x0) } else { 0.0 };
+        let sy = if y1 > y0 { self.h / (y1 - y0) } else { 0.0 };
+        for (i, &(x, y)) in pts.iter().enumerate() {
+            let (px, py) = ((x - x0) * sx, (y - y0) * sy);
             if i == 0 {
-                p.move_to(x, y);
+                p.move_to(px, py);
             } else {
-                p.line_to(x, y);
+                p.line_to(px, py);
             }
         }
         p.close();
         p
     }
 
+    fn regular_polygon(&self, n: usize, start: f32) -> Path {
+        let pts: Vec<(f32, f32)> = (0..n)
+            .map(|i| {
+                let t = start + (i as f32) * 2.0 * PI / n as f32;
+                (t.cos(), t.sin())
+            })
+            .collect();
+        self.fill_box(&pts)
+    }
+
     /// An n-pointed star whose inner radius is `inner` of the outer.
     fn star(&self, points: usize, inner: f32) -> Path {
-        let (cx, cy) = (self.w / 2.0, self.h / 2.0);
-        let (rx, ry) = (self.w / 2.0, self.h / 2.0);
         let inner = inner.clamp(0.05, 0.95);
-        let mut p = Path::new();
-        for i in 0..points * 2 {
-            let t = -PI / 2.0 + (i as f32) * PI / points as f32;
-            let scale = if i % 2 == 0 { 1.0 } else { inner };
-            let (x, y) = (cx + rx * scale * t.cos(), cy + ry * scale * t.sin());
-            if i == 0 {
-                p.move_to(x, y);
-            } else {
-                p.line_to(x, y);
-            }
-        }
-        p.close();
-        p
+        let pts: Vec<(f32, f32)> = (0..points * 2)
+            .map(|i| {
+                // Vertex 0 at the top, then alternating outer and inner every half step.
+                let t = -PI / 2.0 + (i as f32) * PI / points as f32;
+                let r = if i % 2 == 0 { 1.0 } else { inner };
+                (r * t.cos(), r * t.sin())
+            })
+            .collect();
+        self.fill_box(&pts)
     }
 
     fn arrow_h(&self, left: bool) -> Path {
         let (w, h) = (self.w, self.h);
         let shaft = self.adj.frac("adj1", 50000.0) * h;
-        let head = (self.adj.frac("adj2", 50000.0) * w).min(w);
+        // `dx2 = */ ss a2 100000` — the head is measured against the *shorter side*, not
+        // the length. Using the width makes a wide arrow's head grow with the shaft, so a
+        // long thin arrow comes out as a giant chevron with a stub behind it.
+        let head = (self.adj.frac("adj2", 50000.0) * self.ss()).min(w);
         let y0 = (h - shaft) / 2.0;
         let y1 = y0 + shaft;
         let mut p = Path::new();
@@ -710,7 +869,8 @@ impl Builder {
     fn arrow_v(&self, up: bool) -> Path {
         let (w, h) = (self.w, self.h);
         let shaft = self.adj.frac("adj1", 50000.0) * w;
-        let head = (self.adj.frac("adj2", 50000.0) * h).min(h);
+        // Measured against the shorter side; see the note in `arrow_h`.
+        let head = (self.adj.frac("adj2", 50000.0) * self.ss()).min(h);
         let x0 = (w - shaft) / 2.0;
         let x1 = x0 + shaft;
         let mut p = Path::new();
@@ -983,6 +1143,106 @@ mod tests {
                 "{preset} needs an inner subpath, got {moves} MoveTo verbs"
             );
         }
+    }
+
+    /// The extent of a built path, as (x0, y0, x1, y1).
+    fn extent(preset: &str, w: f32, h: f32) -> (f32, f32, f32, f32) {
+        let b = build(preset, w, h, &[]).bounds();
+        (b.x, b.y, b.right(), b.bottom())
+    }
+
+    #[test]
+    fn an_arrow_head_is_measured_against_the_shorter_side() {
+        // `dx2 = */ ss a2 100000`: on a 400x100 arrow the default head is 50 long, not
+        // 200. Scaling it by the width instead grows the head with the shaft, so a long
+        // thin arrow renders as a giant chevron — the shaft matches the oracle and the
+        // head does not, which is exactly how it showed up in the m3 diff.
+        let pts: Vec<(f32, f32)> = build("rightArrow", 400.0, 100.0, &[])
+            .points
+            .iter()
+            .map(|q| (q.x, q.y))
+            .collect();
+        let back = pts
+            .iter()
+            .map(|p| p.0)
+            .filter(|x| *x < 399.0)
+            .fold(0.0f32, f32::max);
+        assert!(
+            (back - 350.0).abs() < 0.01,
+            "head starts at {back}, expected 350 (400 - ss*0.5)"
+        );
+        // The tip still reaches the right edge and the shaft still spans the full width.
+        let (x0, _, x1, _) = extent("rightArrow", 400.0, 100.0);
+        assert!(x0.abs() < 0.01 && (x1 - 400.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn box_filling_polygons_and_stars_touch_every_edge() {
+        // ECMA-376 gives these presets hf/vf factors precisely so they fill the box.
+        // Inscribing them in the box's ellipse instead leaves a gap that is small enough
+        // to look like antialiasing in a pixel diff and obvious when placed next to the
+        // real thing — which is how it was found.
+        for preset in ["pentagon", "heptagon", "decagon", "star4", "star5", "star6"] {
+            let (x0, y0, x1, y1) = extent(preset, 200.0, 100.0);
+            assert!(
+                x0.abs() < 0.01 && y0.abs() < 0.01,
+                "{preset} origin: {x0},{y0}"
+            );
+            assert!(
+                (x1 - 200.0).abs() < 0.01 && (y1 - 100.0).abs() < 0.01,
+                "{preset} extent: {x1},{y1}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_five_pointed_star_has_a_golden_ratio_waist() {
+        // star5 scales its inner radius by `*/ swd2 a 50000`, so adj="19098" means 0.382
+        // — 1/phi^2, the waist of a five-pointed star — not 0.191. Reading it over
+        // 100000 halves the waist and draws five thin spikes instead of a star.
+        //
+        // Checked at a vertex rather than as a radius ratio, because hf and vf differ, so
+        // the star is scaled anisotropically and its radii are not in a single ratio.
+        // Working the spec through for a 100x100 box:
+        //   swd2 = 50*1.05146   iwd2 = swd2*0.38197 = 20.081
+        //   shd2 = svc = 50*1.10557   ihd2 = shd2*0.38197 = 21.115
+        //   pt1 (the inner vertex at -54 degrees)
+        //     x = 50 + 20.081*cos(-54) = 61.803
+        //     y = 55.279 + 21.115*sin(-54) = 38.197
+        // Halving the waist would put it at roughly (55.9, 46.7).
+        let path = build("star5", 100.0, 100.0, &[]);
+        let p1 = path.points.get(1).copied().expect("star5 has ten vertices");
+        assert!(
+            (p1.x - 61.803).abs() < 0.05 && (p1.y - 38.197).abs() < 0.05,
+            "inner vertex at ({}, {}), expected (61.803, 38.197)",
+            p1.x,
+            p1.y
+        );
+    }
+
+    #[test]
+    fn a_hexagon_spans_the_full_height_and_insets_by_the_shorter_side() {
+        // The slanted ends are inset by ss*adj, not w*adj. On a wide shape those are very
+        // different, and using the width makes the hexagon lose its flat top entirely.
+        let (x0, y0, x1, y1) = extent("hexagon", 400.0, 100.0);
+        assert!(
+            y0.abs() < 0.01 && (y1 - 100.0).abs() < 0.01,
+            "height {y0}..{y1}"
+        );
+        assert!(
+            x0.abs() < 0.01 && (x1 - 400.0).abs() < 0.01,
+            "width {x0}..{x1}"
+        );
+        let path = build("hexagon", 400.0, 100.0, &[]);
+        let pts: Vec<(f32, f32)> = path.points.iter().map(|q| (q.x, q.y)).collect();
+        // adj 25000 of the shorter side (100) = 25, not 25000 of the width (100).
+        let top: Vec<f32> = pts.iter().filter(|p| p.1 < 0.01).map(|p| p.0).collect();
+        assert_eq!(top.len(), 2, "expected a flat top edge, got {top:?}");
+        assert!(
+            (top[0] - 25.0).abs() < 0.01,
+            "inset {} should be 25",
+            top[0]
+        );
     }
 
     #[test]

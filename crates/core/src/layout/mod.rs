@@ -325,7 +325,7 @@ fn emit_geometry(
             if let Some(p) = &fill_paint {
                 dl.push(Command::FillPath {
                     path: path.clone(),
-                    paint: p.clone(),
+                    paint: paint::shade_paint(p, ep.shade),
                     rule: geom::FILL_RULE,
                 });
             }

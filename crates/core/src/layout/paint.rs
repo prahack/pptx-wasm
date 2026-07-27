@@ -5,9 +5,11 @@
 
 use crate::dl::{Gradient, GradientStop, LineCap, LineJoin, Paint, Point, Rect, Stroke};
 use crate::emu;
+use crate::model::color::{apply_mods, ColorMod};
 use crate::model::fill::{
     BlipMode, DashStyle, Fill, GradientKind, Line, LineCapStyle, LineJoinStyle,
 };
+use crate::model::geometry::PathFillMode;
 use crate::model::Presentation;
 
 use super::inherit::Resolver;
@@ -218,6 +220,48 @@ pub fn line_to_stroke(
     })
 }
 
+/// Applies a `<a:path fill="lighten|darken|..">` modifier to a resolved paint.
+///
+/// DrawingML states the modes but not their strengths; the convention every renderer
+/// converges on is the luminance pair PowerPoint writes elsewhere — 60000/80000 — so
+/// `lighten` is 40% of the way to white and `darkenLess` is 20% of the way to black.
+/// The blend goes through the same linear-light path as tint and shade, for the reason
+/// recorded on [`crate::model::color::ColorMod::Tint`]: mixing in sRGB darkens midtones
+/// visibly, and these faces sit right next to the unshaded one where it would show.
+pub fn shade_paint(paint: &Paint, mode: PathFillMode) -> Paint {
+    let mods: &[ColorMod] = match mode {
+        PathFillMode::Normal | PathFillMode::None => return paint.clone(),
+        PathFillMode::Lighten => &[ColorMod::Tint(0.6)],
+        PathFillMode::LightenLess => &[ColorMod::Tint(0.8)],
+        PathFillMode::Darken => &[ColorMod::Shade(0.6)],
+        PathFillMode::DarkenLess => &[ColorMod::Shade(0.8)],
+    };
+    match paint {
+        Paint::Solid(c) => Paint::Solid(apply_mods(*c, mods)),
+        Paint::Gradient(g) => {
+            let mut g = g.clone();
+            let stops = match &mut g {
+                Gradient::Linear { stops, .. } | Gradient::Radial { stops, .. } => stops,
+            };
+            for stop in stops.iter_mut() {
+                stop.color = apply_mods(stop.color, mods);
+            }
+            Paint::Gradient(g)
+        }
+        Paint::Hatch {
+            pattern,
+            foreground,
+            background,
+        } => Paint::Hatch {
+            pattern: *pattern,
+            foreground: apply_mods(*foreground, mods),
+            background: apply_mods(*background, mods),
+        },
+        // A bitmap cannot be shaded without touching its pixels, which layout does not do.
+        Paint::Image { .. } => paint.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,6 +420,45 @@ mod tests {
             }
             other => panic!("expected a linear gradient, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_lit_face_is_lighter_and_a_shaded_one_darker_than_the_fill() {
+        use crate::model::geometry::PathFillMode as M;
+        let base = Paint::Solid(Color::rgb(0x4F, 0x81, 0xBD));
+        let lum = |p: &Paint| match p {
+            Paint::Solid(c) => c.r as u32 + c.g as u32 + c.b as u32,
+            _ => unreachable!("solid in, solid out"),
+        };
+        let normal = lum(&base);
+        // The failure this guards is not "the shade is a few percent off" but the lit
+        // face coming out unpainted — a white hole where cube's top should be.
+        assert!(lum(&shade_paint(&base, M::Lighten)) > lum(&shade_paint(&base, M::LightenLess)));
+        assert!(lum(&shade_paint(&base, M::LightenLess)) > normal);
+        assert!(lum(&shade_paint(&base, M::DarkenLess)) < normal);
+        assert!(lum(&shade_paint(&base, M::Darken)) < lum(&shade_paint(&base, M::DarkenLess)));
+        assert_eq!(
+            shade_paint(&base, M::Normal),
+            base,
+            "norm must not touch it"
+        );
+    }
+
+    #[test]
+    fn cube_and_can_come_back_as_shaded_faces() {
+        use crate::layout::preset::faces;
+        use crate::model::geometry::PathFillMode as M;
+        let modes = |p: &str| {
+            faces(p, 100.0, 100.0, &[])
+                .into_iter()
+                .map(|f| f.fill)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(modes("cube"), vec![M::Normal, M::Lighten, M::Darken]);
+        assert_eq!(modes("can"), vec![M::Normal, M::Lighten]);
+        // Everything else stays a single unshaded face.
+        assert_eq!(modes("rect"), vec![M::Normal]);
+        assert_eq!(modes("star5"), vec![M::Normal]);
     }
 
     #[test]

@@ -57,7 +57,8 @@ degrades rather than failing outright — see "Testing philosophy".
 ## Testing philosophy
 - Oracle = headless LibreOffice PNG render. It is imperfect but consistent; treat large diffs as regressions, small ones as tolerance. See "why LibreOffice" below for what it is and is not authoritative about.
 - Add a fixture for every new feature BEFORE implementing it. Golden tests must stay green.
-- Per-suite tolerances live in `tests/golden/suites.json`, each with a written reason. Widening one is a decision to record, not a knob to turn.
+- Per-suite tolerances live in `tests/golden/suites.json`, each with a written reason. Widening one is a decision to record, not a knob to turn — and *tightening* one after a fix is part of the fix, not a separate chore. A tolerance far above the actual figure is not a safety margin, it is a blindfold: m3 sat at 3.5% while hiding four visibly wrong shapes, none of which moved it past 1.3%.
+- **Preset geometry comes from ECMA-376's formulas, not from eyeballing the shape.** Every preset bug found so far was a plausible-looking construction that no diff caught: a star inscribed in the box's ellipse rather than fitted to it, `adj` read over 100000 where the spec says 50000, a head or inset scaled by the width where the spec says `ss` (the shorter side). When adding or fixing one, look it up. Prefer deriving a factor to copying it: `fill_box` measures the extent instead of hard-coding `hf`/`vf`, and reproduces the spec's constants exactly.
 - `cargo test` covers layout logic against a synthetic measurer (`StubMeasure`), so it asserts *where the breaks fall* without depending on which fonts a machine has. Pixel fidelity is the golden suite's job.
 - When a golden diff appears, get `debugTrace()` for the slide first. It tells you in one look whether layout moved something or the rasteriser drew it differently — the most common ambiguity in this project.
 
