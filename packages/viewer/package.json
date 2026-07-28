@@ -18,14 +18,14 @@
   ],
   "license": "MIT",
   "author": "Prabhanu <prabhanu96@gmail.com>",
-  "homepage": "https://github.com/prabhanu/pptx-wasm#readme",
+  "homepage": "https://github.com/prahack/pptx-wasm#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/prabhanu/pptx-wasm.git",
+    "url": "git+https://github.com/prahack/pptx-wasm.git",
     "directory": "packages/viewer"
   },
   "bugs": {
-    "url": "https://github.com/prabhanu/pptx-wasm/issues"
+    "url": "https://github.com/prahack/pptx-wasm/issues"
   },
   "engines": {
     "node": ">=18"

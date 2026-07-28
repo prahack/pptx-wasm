@@ -46,7 +46,7 @@ content figure actually discriminates: on the tables fixture it scores 1.65% aga
 The figure is a poor guide on text-only slides, where every engine lands at 46–49%
 because it is measuring font rasterisation rather than correctness. Full method,
 per-fixture numbers and caveats are in the
-[repository README](https://github.com/prabhanu/pptx-wasm#how-it-compares).
+[repository README](https://github.com/prahack/pptx-wasm#how-it-compares).
 
 ## What it renders
 
