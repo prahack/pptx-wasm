@@ -1,5 +1,5 @@
 {
-  "name": "pptx-viewer-workspace",
+  "name": "pptx-wasm-workspace",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -20,7 +20,10 @@
     "bench": "node tests/golden/bench.mjs",
     "test:browsers": "node tests/golden/browsers.mjs",
     "compare": "node tests/golden/compare.mjs",
-    "build:pkg": "npm run wasm && npm run build --workspace packages/viewer"
+    "build:pkg": "npm run wasm && npm run build --workspace packages/viewer",
+    "release:check": "npm run build:pkg && npm run test:rust && npm run test:golden",
+    "release:dry": "npm run build:pkg && npm publish -w packages/viewer --dry-run",
+    "release": "npm run build:pkg && npm publish -w packages/viewer"
   },
   "devDependencies": {
     "pixelmatch": "^6.0.0",

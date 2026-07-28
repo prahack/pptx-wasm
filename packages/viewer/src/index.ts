@@ -1,7 +1,7 @@
 /**
- * pptx-viewer — a browser-native, read-only `.pptx` renderer.
+ * pptx-wasm — a browser-native, read-only `.pptx` renderer.
  *
- * Two entry points: this one, which is framework-agnostic, and `pptx-viewer/react` for
+ * Two entry points: this one, which is framework-agnostic, and `pptx-wasm/react` for
  * the `<PresentationViewer/>` component.
  *
  * ```ts

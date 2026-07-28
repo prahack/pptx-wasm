@@ -1,5 +1,5 @@
 {
-  "name": "pptx-viewer-example-basic",
+  "name": "pptx-wasm-example-basic",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "pptx-viewer": "file:../../packages/viewer",
+    "pptx-wasm": "file:../../packages/viewer",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

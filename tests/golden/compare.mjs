@@ -107,8 +107,8 @@ const suites = resolveSuites();
 const ENGINES = [
   {
     id: 'ours',
-    label: 'pptx-viewer (this project)',
-    entry: 'pptx-viewer',
+    label: 'pptx-wasm (this project)',
+    entry: 'pptx-wasm',
     wasm: 'packages/viewer/dist/pptx_bg.wasm',
   },
   { id: 'pptx-preview', label: 'pptx-preview 1.0.7', entry: 'pptx-preview' },

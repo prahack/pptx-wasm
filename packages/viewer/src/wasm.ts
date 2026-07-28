@@ -27,7 +27,7 @@ export async function initWasm(source?: WasmSource): Promise<WasmModule> {
   if (ready) {
     if (source !== undefined && source !== loadedFrom) {
       console.warn(
-        '[pptx-viewer] the WASM module is already loaded; the new `wasm` source is ignored',
+        '[pptx-wasm] the WASM module is already loaded; the new `wasm` source is ignored',
       );
     }
     return ready;
@@ -45,7 +45,7 @@ export async function initWasm(source?: WasmSource): Promise<WasmModule> {
       ready = null;
       loadedFrom = undefined;
       throw new PptxError(
-        `could not load the pptx-viewer WASM module: ${e instanceof Error ? e.message : String(e)}`,
+        `could not load the pptx-wasm WASM module: ${e instanceof Error ? e.message : String(e)}`,
         e,
       );
     }

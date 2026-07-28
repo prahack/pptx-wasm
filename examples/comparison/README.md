@@ -8,7 +8,7 @@ cd examples/comparison && npm install
 npm run dev          # http://localhost:5179 — side by side, pick a fixture
 ```
 
-`npm run build:pkg` matters. This app imports `pptx-viewer`, which resolves to
+`npm run build:pkg` matters. This app imports `pptx-wasm`, which resolves to
 `packages/viewer/dist` — a copy made by the package build, not the WASM build. Running
 only `npm run wasm` after a Rust change leaves it stale and the app silently runs the
 previous build. The dev server refuses to start in that state rather than let you debug a

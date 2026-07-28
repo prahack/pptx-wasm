@@ -1,4 +1,4 @@
-# pptx-viewer
+# pptx-wasm
 
 Render PowerPoint `.pptx` files in the browser. No server, no conversion step, no upload —
 the file is parsed and drawn on the client.
@@ -7,7 +7,7 @@ The parser, layout engine and renderer are Rust compiled to WebAssembly. This pa
 the TypeScript API around it, plus an optional React component.
 
 ```tsx
-import { PresentationViewer } from 'pptx-viewer/react';
+import { PresentationViewer } from 'pptx-wasm/react';
 
 <PresentationViewer src="/deck.pptx" width="100%" height="100vh" />
 ```
@@ -15,10 +15,38 @@ import { PresentationViewer } from 'pptx-viewer/react';
 ## Install
 
 ```sh
-npm install pptx-viewer
+npm install pptx-wasm
 ```
 
-React is an optional peer dependency; you only need it for `pptx-viewer/react`.
+React is an optional peer dependency; you only need it for `pptx-wasm/react`.
+
+## How it compares
+
+Against the other browser-side pptx renderers on npm, over the 11 test fixtures every
+engine renders. Payload is gzipped; `cold` is a first render in a fresh page including
+WASM instantiation; `warm` is opening another deck in the same page; `content` is the
+share of inked pixels differing from a LibreOffice render of the same slide.
+
+| engine | payload | cold | warm | content |
+|---|---:|---:|---:|---:|
+| **pptx-wasm** | 319 KB | **29.2 ms** | **2.0 ms** | **20.53%** |
+| @aiden0z/pptx-renderer | 349 KB | 94.1 ms | 5.9 ms | 20.42% |
+| pptxviewjs | 252 KB | 102.8 ms | 38.9 ms | 23.05% |
+| pptx-glimpse | 167 KB | 38.3 ms | 9.4 ms | 25.39% |
+| pptx-preview | 426 KB | 93.1 ms | 5.2 ms | 28.59% |
+| @jvmr/pptx-to-html | 45 KB | 20.6 ms | 2.9 ms | 61.33% |
+| pptx-vanilla-viewer | 1695 KB | 223.6 ms | 27.4 ms | 63.17% |
+
+Read that honestly: this package is **not the smallest**, and on fidelity it ties with
+@aiden0z/pptx-renderer rather than beating it. What it wins is speed — 3.2× faster cold
+and 3.0× faster warm than that engine — and structural coverage, which is where the
+content figure actually discriminates: on the tables fixture it scores 1.65% against
+62.07% and 62.20% for two of the others.
+
+The figure is a poor guide on text-only slides, where every engine lands at 46–49%
+because it is measuring font rasterisation rather than correctness. Full method,
+per-fixture numbers and caveats are in the
+[repository README](https://github.com/prabhanu/pptx-wasm#how-it-compares).
 
 ## What it renders
 
@@ -26,7 +54,7 @@ React is an optional peer dependency; you only need it for `pptx-viewer/react`.
 |---|---|
 | **Text** | paragraphs, runs, alignment, word wrap, line and paragraph spacing, bold/italic/underline/strikethrough, bullets and auto-numbering, vertical anchoring, autofit, embedded fonts |
 | **Shapes** | ~70 preset geometries, custom geometry (including the DrawingML formula language), connectors, nested groups with rotation and flips |
-| **Fills** | solid, linear and radial gradients, picture fills, pattern approximations, transparency |
+| **Fills** | solid, linear and radial gradients (including on text), picture fills stretched or tiled, preset hatch patterns, transparency |
 | **Images** | PNG, JPEG, GIF, BMP, WebP, SVG, with `srcRect` cropping and shape-clipping |
 | **Inheritance** | the full chain: shape → placeholder → layout → master → theme, with colour maps and theme fonts |
 | **Tables** | grids, merged cells, borders, and PowerPoint's built-in table styles |
@@ -40,7 +68,7 @@ images — which no browser can decode.
 ## Framework-agnostic API
 
 ```ts
-import { Presentation } from 'pptx-viewer';
+import { Presentation } from 'pptx-wasm';
 
 const deck = await Presentation.open('/deck.pptx');
 const canvas = document.querySelector('canvas');
@@ -97,7 +125,7 @@ format is not stable; do not build on them.
 
 ```tsx
 import { useRef } from 'react';
-import { PresentationViewer, type PresentationViewerHandle } from 'pptx-viewer/react';
+import { PresentationViewer, type PresentationViewerHandle } from 'pptx-wasm/react';
 
 function Deck() {
   const viewer = useRef<PresentationViewerHandle>(null);
@@ -152,7 +180,7 @@ configuration.
 To serve it from elsewhere — a CDN, or a path your framework controls:
 
 ```ts
-import { initWasm } from 'pptx-viewer';
+import { initWasm } from 'pptx-wasm';
 await initWasm('https://cdn.example.com/pptx_bg.wasm');
 ```
 

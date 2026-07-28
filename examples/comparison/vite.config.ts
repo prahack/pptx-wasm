@@ -25,7 +25,7 @@ function serveFixtures(): Plugin {
 /**
  * Refuses to start against a stale package build.
  *
- * `npm run wasm` rebuilds `crates/wasm/pkg`, but this app imports `pptx-viewer`, which
+ * `npm run wasm` rebuilds `crates/wasm/pkg`, but this app imports `pptx-wasm`, which
  * resolves to `packages/viewer/dist` — a *copy* made by the package build. Change some
  * Rust, rebuild the wasm, reload the page, and you are silently looking at the previous
  * build wondering why your fix did nothing. Ask me how I know.
@@ -59,5 +59,5 @@ function requireFreshPackage(): Plugin {
 export default defineConfig({
   plugins: [react(), serveFixtures(), requireFreshPackage()],
   server: { port: 5179, strictPort: true, fs: { allow: [resolve(__dirname, '../..')] } },
-  optimizeDeps: { exclude: ['pptx-viewer'] },
+  optimizeDeps: { exclude: ['pptx-wasm'] },
 });

@@ -109,7 +109,7 @@ function Harness() {
 
   return (
     <div style={{ font: '14px system-ui, sans-serif', padding: 16 }}>
-      <h1 style={{ fontSize: 18, margin: '0 0 12px' }}>pptx-viewer</h1>
+      <h1 style={{ fontSize: 18, margin: '0 0 12px' }}>pptx-wasm</h1>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <input

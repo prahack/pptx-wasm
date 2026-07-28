@@ -1,4 +1,4 @@
-# pptx-viewer
+# pptx-wasm
 
 A browser-native, read-only `.pptx` renderer. Rust compiled to WebAssembly does the
 parsing, layout and drawing; TypeScript wraps it; React is optional. Nothing is uploaded
@@ -49,7 +49,7 @@ differing from the LibreOffice render.
 | [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 20.6 ms | 2.9 ms | 61.33% |
 | [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 38.3 ms | 9.4 ms | 25.39% |
 | [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 102.8 ms | 38.9 ms | 23.05% |
-| **pptx-viewer** (this project) | **319 KB** | **29.2 ms** | **2.0 ms** | **20.53%** |
+| **pptx-wasm** (this project) | **319 KB** | **29.2 ms** | **2.0 ms** | **20.53%** |
 | [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 94.1 ms | 5.9 ms | 20.42% |
 | [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 93.1 ms | 5.2 ms | 28.59% |
 | [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 223.6 ms | 27.4 ms | 63.17% |

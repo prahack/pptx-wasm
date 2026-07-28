@@ -1,4 +1,4 @@
-# pptx-viewer — basic example
+# pptx-wasm — basic example
 
 A minimal React app using only the documented public API. If this ever needs an
 undocumented export or a deep import, the package's surface is wrong.

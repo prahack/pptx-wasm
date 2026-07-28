@@ -23,7 +23,7 @@ export const BASE = `http://localhost:${PORT}`;
  * occupied by an unrelated project's Vite server, and reusing one silently tests the
  * wrong application. The page title is the cheapest reliable marker.
  */
-const MARKER = '<title>pptx-viewer dev</title>';
+const MARKER = '<title>pptx-wasm dev</title>';
 
 export async function isUp() {
   try {

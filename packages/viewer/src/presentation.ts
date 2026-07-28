@@ -69,7 +69,7 @@ export class Presentation {
       // Best-effort: a deck whose embedded fonts fail to install still renders, with
       // substituted faces. Failing the open would be worse.
       await presentation.#installEmbeddedFonts().catch((e) => {
-        console.warn('[pptx-viewer] embedded fonts could not be installed', e);
+        console.warn('[pptx-wasm] embedded fonts could not be installed', e);
       });
     }
     return presentation;
@@ -104,7 +104,7 @@ export class Presentation {
       try {
         listener();
       } catch (e) {
-        console.warn('[pptx-viewer] an onAssetsReady listener threw', e);
+        console.warn('[pptx-wasm] an onAssetsReady listener threw', e);
       }
     }
   }
@@ -310,7 +310,7 @@ export class Presentation {
       if (this.#destroyed) return;
       this.#inner.setImage(id, image);
     } catch (e) {
-      console.warn(`[pptx-viewer] image ${id} could not be decoded`, e);
+      console.warn(`[pptx-wasm] image ${id} could not be decoded`, e);
       if (!this.#destroyed) this.#inner.markImageFailed(id);
     } finally {
       this.#decoding.delete(id);
@@ -338,7 +338,7 @@ export class Presentation {
           this.#installedFonts.push(face);
         } catch (e) {
           // A single unusable variant should not stop the others installing.
-          console.warn(`[pptx-viewer] embedded font ${font.typeface} could not be used`, e);
+          console.warn(`[pptx-wasm] embedded font ${font.typeface} could not be used`, e);
         }
       }
     }

@@ -1,5 +1,5 @@
 /**
- * The smallest useful pptx-viewer app.
+ * The smallest useful pptx-wasm app.
  *
  * Deliberately uses nothing but the documented public API — if this file ever needs an
  * undocumented export or a deep import, the package's surface is wrong.
@@ -8,8 +8,8 @@
 import { useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import type { PresentationInfo } from 'pptx-viewer';
-import { PresentationViewer, type PresentationViewerHandle } from 'pptx-viewer/react';
+import type { PresentationInfo } from 'pptx-wasm';
+import { PresentationViewer, type PresentationViewerHandle } from 'pptx-wasm/react';
 
 function App() {
   const viewer = useRef<PresentationViewerHandle>(null);
@@ -20,7 +20,7 @@ function App() {
 
   return (
     <main style={{ font: '15px system-ui, sans-serif', padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 20, marginTop: 0 }}>pptx-viewer</h1>
+      <h1 style={{ fontSize: 20, marginTop: 0 }}>pptx-wasm</h1>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         <input

@@ -1,8 +1,35 @@
 {
-  "name": "pptx-viewer",
+  "name": "pptx-wasm",
   "version": "0.1.0",
-  "description": "Browser-native, read-only .pptx viewer. Rust/WASM core, no server-side conversion.",
+  "description": "Browser-native, read-only .pptx renderer. Rust/WASM core, canvas output, no server-side conversion and nothing uploaded.",
+  "keywords": [
+    "pptx",
+    "powerpoint",
+    "presentation",
+    "slides",
+    "viewer",
+    "renderer",
+    "ooxml",
+    "wasm",
+    "webassembly",
+    "rust",
+    "canvas",
+    "react"
+  ],
   "license": "MIT",
+  "author": "Prabhanu <prabhanu96@gmail.com>",
+  "homepage": "https://github.com/prabhanu/pptx-wasm#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prabhanu/pptx-wasm.git",
+    "directory": "packages/viewer"
+  },
+  "bugs": {
+    "url": "https://github.com/prabhanu/pptx-wasm/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -23,13 +50,18 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc -p tsconfig.build.json",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "react": ">=18",

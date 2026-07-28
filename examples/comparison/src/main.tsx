@@ -142,7 +142,7 @@ async function renderOurs(host: HTMLElement, bytes: ArrayBuffer, slide: number):
   host.appendChild(canvas);
 
   const t0 = performance.now();
-  const { Presentation } = await import('pptx-viewer');
+  const { Presentation } = await import('pptx-wasm');
   // Each engine gets its own copy: a consumer is free to detach the buffer it is given.
   const deck = await Presentation.open(bytes.slice(0));
   const openMs = performance.now() - t0;
@@ -389,7 +389,7 @@ async function renderVanilla(host: HTMLElement, bytes: ArrayBuffer, slide: numbe
 }
 
 const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
-  ours: { label: 'pptx-viewer (this project)', run: renderOurs },
+  ours: { label: 'pptx-wasm (this project)', run: renderOurs },
   'pptx-preview': { label: 'pptx-preview 1.0.7', run: renderPptxPreview },
   pptxviewjs: { label: 'pptxviewjs 1.1.9', run: renderPptxViewJs },
   aiden0z: { label: '@aiden0z/pptx-renderer 1.2.4', run: renderAiden },
@@ -711,7 +711,7 @@ function App() {
             }}
           >
             {speedup >= 1
-              ? `pptx-viewer is ${speedup.toFixed(1)}× faster than the next best on this slide`
+              ? `pptx-wasm is ${speedup.toFixed(1)}× faster than the next best on this slide`
               : `the fastest other engine is ${(1 / speedup).toFixed(1)}× faster on this slide`}
           </span>
         )}
