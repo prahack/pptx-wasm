@@ -23,6 +23,11 @@
  *
  * Payload is measured from what each package actually ships.
  *
+ * Two of the engines do not install cleanly. pptxviewjs imports `chart.js/auto` and
+ * pptx-vanilla-viewer imports `three`, and neither declares the dependency, so a bundler
+ * fails to resolve them until you install the missing package yourself. Both are in this
+ * example's package.json for that reason, and both count toward their engine's payload.
+ *
  *   npm run compare
  *   npm run compare -- --runs=5 --suite=m2
  *   npm run compare -- --file=~/decks/quarterly.pptx     # score your own deck
@@ -34,7 +39,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -100,81 +105,109 @@ const suites = resolveSuites();
  * has no runtime dependencies to add.
  */
 const ENGINES = [
-  { id: 'ours', label: 'pptx-viewer (this project)', dist: 'packages/viewer/dist', deps: [] },
   {
-    id: 'pptx-preview',
-    label: 'pptx-preview 1.0.7',
-    self: 'pptx-preview/dist/pptx-preview.es.js',
-    deps: ['jszip', 'lodash', 'echarts', 'uuid', 'tslib'],
+    id: 'ours',
+    label: 'pptx-viewer (this project)',
+    entry: 'pptx-viewer',
+    wasm: 'packages/viewer/dist/pptx_bg.wasm',
   },
-  {
-    id: 'pptxviewjs',
-    label: 'pptxviewjs 1.1.9',
-    self: 'pptxviewjs/dist/PptxViewJS.es.js',
-    // Its package.json declares no dependencies, but the bundle imports `chart.js/auto`.
-    // Without it installed the module graph fails to resolve and nothing renders, so it
-    // is a dependency in every sense except the declared one — and it is counted here.
-    deps: ['chart.js'],
-  },
-  {
-    id: 'aiden0z',
-    label: '@aiden0z/pptx-renderer 1.2.4',
-    self: '@aiden0z/pptx-renderer/dist/aiden0z-pptx-renderer.es.js',
-    deps: ['jszip', 'echarts'],
-  },
-  {
-    id: 'jvmr',
-    label: '@jvmr/pptx-to-html 1.1.1',
-    self: '@jvmr/pptx-to-html/dist/index.js',
-    deps: ['jszip'],
-  },
+  { id: 'pptx-preview', label: 'pptx-preview 1.0.7', entry: 'pptx-preview' },
+  { id: 'pptxviewjs', label: 'pptxviewjs 1.1.9', entry: 'pptxviewjs' },
+  { id: 'aiden0z', label: '@aiden0z/pptx-renderer 1.2.4', entry: '@aiden0z/pptx-renderer' },
+  { id: 'jvmr', label: '@jvmr/pptx-to-html 1.1.1', entry: '@jvmr/pptx-to-html' },
+  { id: 'glimpse', label: 'pptx-glimpse 5.0.0', entry: 'pptx-glimpse' },
+  { id: 'vanilla', label: 'pptx-vanilla-viewer 1.6.2', entry: 'pptx-vanilla-viewer' },
 ];
 
 // --------------------------------------------------------------------- payload
 
-/** Total gzipped size of the files a package actually ships to a browser. */
-function payloadOf(dir, exts = ['.js', '.wasm', '.cjs', '.css']) {
-  if (!existsSync(dir)) return null;
-  let total = 0;
-  const walk = (d) => {
-    for (const entry of readdirSync(d, { withFileTypes: true })) {
-      const full = join(d, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      // Source maps and type declarations are not downloaded at runtime.
-      if (entry.name.endsWith('.map') || entry.name.endsWith('.d.ts')) continue;
-      if (!exts.some((e) => entry.name.endsWith(e))) continue;
-      total += gzipSync(readFileSync(full)).length;
-    }
-  };
-  walk(dir);
-  return total;
-}
+/**
+ * What each engine actually makes a browser download, measured by bundling it.
+ *
+ * The previous version added up the `dist` directories of an engine's declared
+ * dependencies. That is easy and wrong in both directions: it counts code the bundler
+ * would tree-shake, it counts optional features nobody imported, and — worst — it counts
+ * lazily-imported chunks as though they were part of the first load. pptx-vanilla-viewer
+ * pulls `three` only inside `await import('./smartart-3d-*.js')`, so 5.5MB of its
+ * apparent payload never reaches a browser unless the deck has 3D SmartArt.
+ *
+ * So each engine is bundled for real with esbuild, and its metafile is walked from the
+ * entry through *static* imports only. That set is `initial` — what a first paint costs.
+ * Everything else esbuild emitted is reachable solely through a dynamic import and is
+ * reported as `deferred`. Sizes are gzipped, since that is what crosses the network.
+ */
+async function measurePayloads() {
+  // Inside the example app: esbuild resolves bare specifiers relative to the importing
+  // file, so an entry written anywhere else cannot see its node_modules.
+  const tmp = join(APP, '.payload-build');
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
 
-/** Gzipped bytes each engine ships, split into its own bundle and its dependencies. */
-function measurePayloads() {
-  const modules = join(APP, 'node_modules');
+  let esbuild;
+  try {
+    esbuild = await import(join(APP, 'node_modules/esbuild/lib/main.js'));
+  } catch {
+    return null;
+  }
+
   const out = {};
   for (const e of ENGINES) {
-    if (e.dist) {
-      out[e.id] = { self: payloadOf(join(ROOT, e.dist)) ?? 0, deps: {}, total: 0 };
-      out[e.id].total = out[e.id].self;
-      continue;
-    }
-    const selfPath = join(modules, e.self);
-    const self = existsSync(selfPath) ? gzipSync(readFileSync(selfPath)).length : null;
-    const deps = {};
-    let depTotal = 0;
-    for (const d of e.deps) {
-      const size = payloadOf(join(modules, d, 'dist')) ?? payloadOf(join(modules, d));
-      if (size) {
-        deps[d] = size;
-        depTotal += size;
+    const entry = join(tmp, `${e.id}.js`);
+    // Reference the export the adapter actually uses, so nothing is tree-shaken that the
+    // real render path needs.
+    writeFileSync(entry, `import * as m from ${JSON.stringify(e.entry)};\nglobalThis.__keep = m;\n`);
+    try {
+      const result = await esbuild.build({
+        entryPoints: [entry],
+        bundle: true,
+        splitting: true,
+        format: 'esm',
+        outdir: join(tmp, e.id),
+        minify: true,
+        metafile: true,
+        write: true,
+        absWorkingDir: APP,
+        platform: 'browser',
+        conditions: ['browser', 'import', 'default'],
+        logLevel: 'silent',
+        loader: { '.wasm': 'file', '.png': 'file', '.svg': 'file', '.ttf': 'file' },
+      });
+
+      const outputs = result.metafile.outputs;
+      const entryFile = Object.keys(outputs).find((f) => outputs[f].entryPoint);
+      // Walk static imports transitively; anything unreached is dynamic-only.
+      const initial = new Set();
+      const walk = (f) => {
+        if (!f || initial.has(f) || !outputs[f]) return;
+        initial.add(f);
+        for (const imp of outputs[f].imports ?? []) {
+          if (imp.kind === 'import-statement') walk(imp.path);
+        }
+      };
+      walk(entryFile);
+
+      const gz = (f) => gzipSync(readFileSync(join(APP, f))).length;
+      let initialBytes = 0;
+      let deferredBytes = 0;
+      for (const f of Object.keys(outputs)) {
+        const size = existsSync(join(APP, f)) ? gz(f) : 0;
+        if (initial.has(f)) initialBytes += size;
+        else deferredBytes += size;
       }
+      // Our own payload is JS plus the .wasm the module fetches on first open, which is
+      // not a JS import and so is not in the graph. A user downloads it every time.
+      if (e.wasm) {
+        const w = join(ROOT, e.wasm);
+        if (existsSync(w)) initialBytes += gzipSync(readFileSync(w)).length;
+      }
+      out[e.id] = {
+        initial: initialBytes,
+        deferred: deferredBytes,
+        total: initialBytes + deferredBytes,
+      };
+    } catch (err) {
+      out[e.id] = { initial: null, deferred: null, error: String(err.message ?? err).split('\n')[0] };
     }
-    out[e.id] = { self, deps, total: (self ?? 0) + depTotal };
   }
   return out;
 }
@@ -420,7 +453,7 @@ async function main() {
     server.stop();
   }
 
-  report(rows, measurePayloads(), haveOracle);
+  report(rows, await measurePayloads(), haveOracle);
 }
 
 function report(rows, payload, haveOracle) {
@@ -428,16 +461,38 @@ function report(rows, payload, haveOracle) {
   const EW = Math.max(...ENGINES.map((e) => e.id.length)) + 1;
 
   console.log('\n' + '='.repeat(78));
-  console.log('PAYLOAD (gzipped, what the browser downloads)');
+  console.log('PAYLOAD (gzipped, measured by bundling each engine with esbuild)');
   console.log('='.repeat(78));
-  for (const e of ENGINES) {
-    const pay = payload[e.id];
-    if (!pay) continue;
-    const note = e.dist ? 'wasm + js, no runtime deps' : `bundle ${kb(pay.self)} + deps`;
-    console.log(`  ${label(e.id).padEnd(30)} ${kb(pay.total).padStart(10)}   ${note}`);
-    for (const [name, size] of Object.entries(pay.deps)) {
-      console.log(`      ${name.padEnd(26)} ${kb(size).padStart(10)}`);
+  if (!payload) {
+    console.log('  esbuild unavailable — payload not measured.');
+  } else {
+    console.log(
+      `  ${'engine'.padEnd(30)} ${'initial'.padStart(10)} ${'deferred'.padStart(10)} ${'total'.padStart(10)}`,
+    );
+    for (const e of ENGINES) {
+      const pay = payload[e.id];
+      if (!pay) continue;
+      if (pay.error) {
+        console.log(`  ${label(e.id).padEnd(30)} could not bundle: ${pay.error}`);
+        continue;
+      }
+      console.log(
+        `  ${label(e.id).padEnd(30)} ${kb(pay.initial).padStart(10)} ` +
+          `${kb(pay.deferred).padStart(10)} ${kb(pay.total).padStart(10)}`,
+      );
     }
+    console.log(
+      '\n  initial  = entry plus everything reachable through static imports, including the\n' +
+        '             .wasm this project fetches on open.\n' +
+        '  deferred = chunks reachable only through a dynamic import.\n' +
+        '  total    = the whole library.\n\n' +
+        '  Read initial and total as a lower and an upper bound on what rendering one slide\n' +
+        '  costs, not as "required" and "optional". An engine that code-splits its own\n' +
+        '  renderer — pptx-vanilla-viewer ships 53KB initial and 1642KB deferred — fetches\n' +
+        '  much of that deferred half before it can draw anything, which is visible in its\n' +
+        '  cold time. The summary below uses total, so no engine is credited for deferring\n' +
+        '  work it still has to do.',
+    );
   }
 
   console.log('\n' + '='.repeat(78));
@@ -490,7 +545,7 @@ function report(rows, payload, haveOracle) {
     );
     for (const id of ids) {
       console.log(
-        `  ${label(id).padEnd(30)} ${kb(payload[id]?.total).padStart(10)} ` +
+        `  ${label(id).padEnd(30)} ${kb(payload?.[id]?.total).padStart(10)} ` +
           cols.map(([, k, f]) => f(mean(id, k)).padStart(9)).join(' '),
       );
     }

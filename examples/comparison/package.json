@@ -11,11 +11,15 @@
     "@aiden0z/pptx-renderer": "^1.2.4",
     "@jvmr/pptx-to-html": "^1.1.1",
     "chart.js": "^4.5.1",
+    "pptx-glimpse": "^5.0.0",
     "pptx-preview": "^1.0.7",
+    "pptx-vanilla-viewer": "^1.6.2",
     "pptx-viewer": "file:../../packages/viewer",
+    "pptx-viewer-core": "^2.0.5",
     "pptxviewjs": "^1.1.9",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

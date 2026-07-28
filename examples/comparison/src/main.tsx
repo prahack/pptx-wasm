@@ -33,7 +33,14 @@ import { createRoot } from 'react-dom/client';
 // taking the page down with it. pptxviewjs imports an undeclared `chart.js` and did
 // exactly that, hiding every other engine's result behind its failure.
 
-export type EngineId = 'ours' | 'pptx-preview' | 'pptxviewjs' | 'aiden0z' | 'jvmr';
+export type EngineId =
+  | 'ours'
+  | 'pptx-preview'
+  | 'pptxviewjs'
+  | 'aiden0z'
+  | 'jvmr'
+  | 'glimpse'
+  | 'vanilla';
 
 export interface Timing {
   /** Fetching or reading the bytes. Reported separately so it can be excluded. */
@@ -280,12 +287,115 @@ async function renderJvmr(host: HTMLElement, bytes: ArrayBuffer, slide: number):
   return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
 }
 
+/**
+ * Renders with pptx-glimpse, which emits SVG.
+ *
+ * Uses its documented parse-once path — `readPptx` for the model, then one
+ * `renderPptxSourceModelToSvg` per slide — rather than converting the whole deck each
+ * time. Its API supports both, and picking the slower one would be misrepresenting it.
+ */
+const glimpseCache = new WeakMap<
+  ArrayBuffer,
+  { model: Awaited<ReturnType<typeof import('@pptx-glimpse/document').readPptx>>; count: number }
+>();
+
+async function renderGlimpse(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
+  host.replaceChildren();
+  const mount = document.createElement('div');
+  mount.style.width = `${W}px`;
+  mount.style.height = `${H}px`;
+  host.appendChild(mount);
+
+  const t0 = performance.now();
+  const [{ renderPptxSourceModelToSvg }, { readPptx }] = await Promise.all([
+    import('pptx-glimpse'),
+    import('@pptx-glimpse/document'),
+  ]);
+  let entry = glimpseCache.get(bytes);
+  if (!entry) {
+    const model = await readPptx(new Uint8Array(bytes.slice(0)));
+    entry = { model, count: model.slides.length || 1 };
+    glimpseCache.set(bytes, entry);
+  }
+  const openMs = performance.now() - t0;
+
+  const index = Math.min(Math.max(0, slide), Math.max(0, entry.count - 1));
+  const t1 = performance.now();
+  const report = await renderPptxSourceModelToSvg(entry.model, {
+    slides: [index + 1],
+    width: W,
+    height: H,
+  });
+  mount.innerHTML = report.slides[0]?.svg ?? '';
+  // The SVG comes back at the slide's native size (1280x720 for a 16:9 deck), so it must
+  // be fitted to the pane or it renders a third too large and clipped. Its viewBox does
+  // the scaling; only the element's own width/height need overriding. Getting this wrong
+  // would have scored the engine's geometry as broken when it is not.
+  const svg = mount.querySelector('svg');
+  if (svg) {
+    svg.setAttribute('width', String(W));
+    svg.setAttribute('height', String(H));
+    svg.style.width = `${W}px`;
+    svg.style.height = `${H}px`;
+  }
+  flushLayout(mount);
+  const renderMs = performance.now() - t1;
+
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: entry.count };
+}
+
+/**
+ * Renders with pptx-vanilla-viewer (the ChristopherVR engine's framework-free build).
+ *
+ * Its chrome — toolbar, thumbnail rail, inspector — is switched off. That is not to
+ * flatter it: the accuracy score diffs the whole pane against a slide render, so leaving
+ * a toolbar in frame would count its own UI as error and make the number meaningless.
+ * What is being compared is the slide, for every engine.
+ */
+async function renderVanilla(host: HTMLElement, bytes: ArrayBuffer, slide: number): Promise<Timing> {
+  host.replaceChildren();
+  const mount = document.createElement('div');
+  mount.style.width = `${W}px`;
+  mount.style.height = `${H}px`;
+  host.appendChild(mount);
+
+  const t0 = performance.now();
+  const mod = await import('pptx-vanilla-viewer');
+  if (!document.getElementById('vanilla-css')) {
+    const style = document.createElement('style');
+    style.id = 'vanilla-css';
+    style.textContent = mod.getViewerCss();
+    document.head.appendChild(style);
+  }
+  const viewer = mod.createPptxViewer(mount, {
+    readOnly: true,
+    editable: false,
+    showToolbar: false,
+    showThumbnails: false,
+    showInspector: false,
+    showFormatToolbar: false,
+  } as never);
+  await viewer.loadFile(bytes.slice(0));
+  const openMs = performance.now() - t0;
+
+  const count = viewer.getSlideCount() || 1;
+  const index = Math.min(Math.max(0, slide), Math.max(0, count - 1));
+  const t1 = performance.now();
+  viewer.goToSlide(index);
+  flushLayout(mount);
+  const renderMs = performance.now() - t1;
+
+  return { fetchMs: 0, openMs, renderMs, totalMs: openMs + renderMs, slideCount: count };
+}
+
 const ENGINES: Record<EngineId, { label: string; run: typeof renderOurs }> = {
   ours: { label: 'pptx-viewer (this project)', run: renderOurs },
   'pptx-preview': { label: 'pptx-preview 1.0.7', run: renderPptxPreview },
   pptxviewjs: { label: 'pptxviewjs 1.1.9', run: renderPptxViewJs },
   aiden0z: { label: '@aiden0z/pptx-renderer 1.2.4', run: renderAiden },
   jvmr: { label: '@jvmr/pptx-to-html 1.1.1', run: renderJvmr },
+  glimpse: { label: 'pptx-glimpse 5.0.0', run: renderGlimpse },
+  vanilla: { label: 'pptx-vanilla-viewer 1.6.2', run: renderVanilla },
 };
 
 /** Every engine, in display order. Kept next to ENGINES so the two cannot drift. */
