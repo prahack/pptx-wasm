@@ -32,6 +32,8 @@ const fixture = params.get('fixture');
 const slideParam = Number.parseInt(params.get('slide') ?? '0', 10);
 const renderWidth = Number.parseInt(params.get('w') ?? '960', 10);
 const renderHeight = Number.parseInt(params.get('h') ?? '540', 10);
+// `?select=1` turns on the selectable text overlay, for trying it and for testing it.
+const selectable = params.get('select') === '1';
 
 function Harness() {
   const [src, setSrc] = useState<string | File | null>(
@@ -91,6 +93,7 @@ function Harness() {
       <div style={{ width: renderWidth, height: renderHeight, background: '#fff' }}>
         {src && (
           <PresentationViewer
+            selectableText={selectable}
             ref={viewer}
             src={src}
             slide={slide}
@@ -154,6 +157,7 @@ function Harness() {
       >
         {src ? (
           <PresentationViewer
+            selectableText={selectable}
             ref={viewer}
             src={src}
             slide={slide}

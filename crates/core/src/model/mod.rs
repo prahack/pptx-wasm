@@ -9,6 +9,7 @@ pub mod geometry;
 pub mod media;
 pub mod shape;
 pub mod table;
+#[cfg(feature = "tables")]
 pub mod table_style;
 pub mod text;
 pub mod theme;
@@ -24,6 +25,7 @@ pub use shape::{
     SlideLayout, SlideMaster,
 };
 pub use table::{Table, TableCell, TableRow};
+#[cfg(feature = "tables")]
 pub use table_style::{CellPosition, PartStyle, TableStyle, TableStyles};
 pub use text::{BodyProps, ListStyle, Paragraph, ParagraphProps, Run, RunProps, TextBody};
 pub use theme::{ColorScheme, FontScheme, FormatScheme, Theme};
@@ -68,6 +70,7 @@ pub struct Presentation {
     pub(crate) theme_cache: RefCell<HashMap<String, Rc<Theme>>>,
     pub(crate) media: RefCell<MediaRegistry>,
     /// `ppt/tableStyles.xml`, parsed on first use. Decks without a table never pay for it.
+    #[cfg(feature = "tables")]
     pub(crate) table_styles: RefCell<Option<Rc<TableStyles>>>,
     #[cfg(feature = "charts")]
     pub(crate) chart_cache: RefCell<HashMap<String, Rc<Chart>>>,
@@ -88,6 +91,7 @@ impl Presentation {
             master_cache: RefCell::new(HashMap::new()),
             theme_cache: RefCell::new(HashMap::new()),
             media: RefCell::new(MediaRegistry::new()),
+            #[cfg(feature = "tables")]
             table_styles: RefCell::new(None),
             #[cfg(feature = "charts")]
             chart_cache: RefCell::new(HashMap::new()),
@@ -112,6 +116,7 @@ impl Presentation {
     ///
     /// Almost always just a default GUID pointing at a style PowerPoint keeps to itself,
     /// which [`TableStyles::get`] resolves against the built-in table.
+    #[cfg(feature = "tables")]
     pub fn table_styles(&self) -> Rc<TableStyles> {
         if let Some(hit) = self.table_styles.borrow().as_ref() {
             return Rc::clone(hit);

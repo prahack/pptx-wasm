@@ -38,10 +38,12 @@ wasm-opt = ["-O3", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
 wasm-opt = false
 
 [features]
-default = ["panic-hook", "charts"]
+default = ["panic-hook", "charts", "tables"]
 # Forwards to pptx-core. Building without it drops chart parsing, layout and rendering;
 # see the note there for what a chart-bearing deck then does.
 charts = ["pptx-core/charts"]
+# Forwards to pptx-core; drops table layout and the built-in style catalogue.
+tables = ["pptx-core/tables"]
 # Routes Rust panics to console.error. Small, and the difference between a useful bug
 # report and "the wasm module trapped".
 panic-hook = ["dep:console_error_panic_hook"]

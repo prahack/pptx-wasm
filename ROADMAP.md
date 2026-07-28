@@ -31,21 +31,31 @@ we need to close the one capability gap that no amount of speed compensates for.
 
 ## P0 — the gaps that cost us adoption
 
-### 1. Text selection and accessibility — **core done, overlay pending**
+### 1. Text selection and accessibility — ~~**done**~~
 
-`crates/renderer/src/textlayer.rs` is a fourth `Renderer` backend that reports where the
-text is instead of drawing it: string, baseline, measured width, size, family, weight,
-slant and rotation, all in device pixels. Exposed as `Presentation.textLayer(index,
-options)` in TypeScript.
+Two halves, both landed.
 
-It walks the display list through the same `render()` the drawing backends use, which is
-the property that matters: a run culled from the canvas is absent from the layer too, so
-the overlay can never offer selectable text where nothing was painted. That is asserted
-directly.
+**The data.** `crates/renderer/src/textlayer.rs` is a fourth `Renderer` backend that
+reports where the text is instead of drawing it — string, baseline, measured width, size,
+family, weight, slant, rotation. It walks the display list through the same `render()` the
+drawing backends use, so a run culled from the canvas is absent from the layer too and the
+overlay can never offer selectable text where nothing was painted. Exposed as
+`Presentation.textLayer(index, options)`.
 
-**What remains is the DOM half** — rendering those runs as transparent positioned spans
-inside `<PresentationViewer/>`, behind an option, and checking it with a real screen
-reader rather than assuming. The data is all there; nothing else needs to change in Rust.
+**The overlay.** `<PresentationViewer selectableText />` lays a transparent `<span>` per
+run over the canvas. Verified in a browser: 11 spans on the inheritance fixture, and a
+`Range` across three of them selects `"Highlights• Revenue up 12% year on year"`.
+
+Off by default, because it costs a DOM node per run and a dense slide has hundreds.
+Screen readers and find-in-page never needed it — the component has always rendered an
+off-screen copy of the slide text for them. What was genuinely missing was *selection*,
+which is a pointer interaction and cannot be served by an off-screen block.
+
+One incidental result worth keeping: each span is scaled to the width layout measured, and
+the correction needed turns out to be **within 0.02%**. The browser and our own
+`measureText`-based layout agree on advance widths to four decimal places, which is direct
+evidence for the Spike A decision in `CLAUDE.md` — previously supported by cross-browser
+ink ratios, now by per-run advances.
 
 ### 2. The flowchart and action-button presets — ~~**done**~~
 
@@ -107,30 +117,32 @@ control points, which for a quarter-circle sits about 5% outside the arc, so a s
 exactly inside its box reported a box 5% too large. That was rejecting correct geometry in
 the coverage test and, less visibly, making the renderer cull less than it could.
 
-### 3. Payload — **charts gated; 315 KB → 288 KB without them**
+### 3. Payload — ~~**done**~~, 317 KB → 270 KB with both features off
 
-Measured with `twiggy` against a symbol build rather than guessed. By subsystem, on the
-unoptimised binary:
+`charts` and `tables` are now default-on Cargo features on `pptx-core` and `pptx-wasm`.
+Gzipped module, measured:
 
-| | bytes |
-|---|---|
-| other core | 205 KB |
-| tables (incl. the built-in style tables) | 62 KB |
-| charts | 48 KB |
-| text | 42 KB |
-| presets | 32 KB |
-| zip/inflate | 28 KB |
+| build | size | saving |
+|---|---|---|
+| full | 317.2 KB | — |
+| without `charts` | 290.1 KB | 27.1 KB |
+| without `tables` | 298.0 KB | 19.2 KB |
+| without both | **270.0 KB** | **47.2 KB** |
 
-`charts` is now a default-on Cargo feature on both `pptx-core` and `pptx-wasm`. Building
-without it saves **27 KB gzipped** — 315.5 KB → 288.4 KB — and a deck containing a chart
-still parses and renders everything else on the slide; only the chart frame is empty.
+A build without a feature still parses a deck that uses it and renders everything else on
+the slide; only that shape's frame is empty.
 
-Two things this measurement changed. **Tables are bigger than charts** (62 KB against
-48 KB), almost entirely the hardcoded built-in style tables — `medium_style_2` alone is
-11.7 KB — so a `tables` feature is worth more than the chart one and is the obvious next
-cut. And the original ~220 KB target looks unreachable without giving up something a
-viewer needs: after charts and tables there is no large, separable block left, just the
-205 KB of parser, layout and inheritance that *is* the product.
+**The twiggy attribution over-predicted the table saving, and that is the useful part.**
+On the unoptimised symbol build tables measured 62 KB against charts' 48 KB, so tables
+looked like the bigger cut. Gzipped they are the smaller one — most of the table weight is
+the built-in style catalogue sitting in `.rodata`, and a table of repetitive style records
+compresses far better than the code it looked comparable to. Attribution on an
+unoptimised, uncompressed binary ranks subsystems; it does not size them. Only the
+end-to-end number does.
+
+For the same reason the original ~220 KB target is off the table: after these two there is
+no large separable block left, only the 205 KB of parser, layout and inheritance that is
+the product.
 
 ### 4. CI — ~~**done**~~
 

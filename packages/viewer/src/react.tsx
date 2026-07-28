@@ -21,7 +21,12 @@ import {
 } from 'react';
 
 import { Presentation } from './presentation.js';
-import { PptxError, type PresentationInfo, type PresentationViewerProps } from './types.js';
+import {
+  PptxError,
+  type PresentationInfo,
+  type PresentationViewerProps,
+  type TextLayerRun,
+} from './types.js';
 
 /** Imperative handle, for callers that need to drive the viewer. */
 export interface PresentationViewerHandle {
@@ -47,6 +52,7 @@ export const PresentationViewer = forwardRef<PresentationViewerHandle, Presentat
       fit = 'contain',
       zoom = 1,
       keyboard = true,
+      selectableText = false,
       wasm,
       loading,
       renderError,
@@ -58,6 +64,7 @@ export const PresentationViewer = forwardRef<PresentationViewerHandle, Presentat
     } = props;
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [textRuns, setTextRuns] = useState<TextLayerRun[]>([]);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const presentationRef = useRef<Presentation | null>(null);
 
@@ -130,10 +137,24 @@ export const PresentationViewer = forwardRef<PresentationViewerHandle, Presentat
         handlers.current.onError?.(err);
       });
 
+      // The overlay is positioned in CSS pixels, so it asks for the layout at the
+      // canvas's CSS size with dpr 1 — the same view, minus the device-pixel scaling.
+      if (selectableText) {
+        setTextRuns(
+          deck.textLayer(index, {
+            width: canvas.clientWidth || undefined,
+            height: canvas.clientHeight || undefined,
+            dpr: 1,
+            fit,
+            zoom,
+          }),
+        );
+      }
+
       // Warm the neighbours so navigation does not pay for layout.
       deck.prepare(index + 1);
       deck.prepare(index - 1);
-    }, [currentSlide, fit, zoom]);
+    }, [currentSlide, fit, zoom, selectableText]);
 
     useEffect(() => {
       draw();
@@ -284,6 +305,47 @@ export const PresentationViewer = forwardRef<PresentationViewerHandle, Presentat
               // assistive technology and for find-in-page.
               aria-hidden="true"
             />
+            {selectableText && (
+              // Transparent but selectable. `left`/`top` are the run's baseline, so the
+              // span is shifted up by its own size to sit on it, and scaleX corrects the
+              // browser's advance width to the one layout actually measured — without
+              // that the selection drifts from the glyphs across a long line.
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  overflow: 'hidden',
+                  pointerEvents: 'none',
+                  userSelect: 'text',
+                }}
+              >
+                {textRuns.map((r, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      left: r.x,
+                      top: r.y - r.size,
+                      height: r.size,
+                      fontFamily: r.family,
+                      fontSize: r.size,
+                      fontWeight: r.weight,
+                      fontStyle: r.italic ? 'italic' : 'normal',
+                      lineHeight: 1,
+                      whiteSpace: 'pre',
+                      color: 'transparent',
+                      transformOrigin: '0% 0%',
+                      pointerEvents: 'auto',
+                      cursor: 'text',
+                    }}
+                    ref={(el) => fitSpan(el, r.width, r.rotation)}
+                  >
+                    {r.text}
+                  </span>
+                ))}
+              </div>
+            )}
             {!info && (loading ?? <DefaultLoading />)}
             {/* Visually hidden, but present in the accessibility tree and searchable. */}
             <div
@@ -305,6 +367,26 @@ export const PresentationViewer = forwardRef<PresentationViewerHandle, Presentat
     );
   },
 );
+
+/**
+ * Squeezes a span to the width layout measured for the run.
+ *
+ * The browser re-measures the string itself, and its advance will not match ours exactly —
+ * a different fallback face, different kerning. Left alone the two drift apart across a
+ * long line and the selection highlight stops matching the glyphs under it. Scaling the
+ * span to the measured width pins them together.
+ */
+function fitSpan(el: HTMLSpanElement | null, width: number, rotation: number): void {
+  if (!el || width <= 0) return;
+  // Rebuilt from the run every time rather than edited in place: React re-runs this ref
+  // on each render, and appending to whatever is already there compounds the correction.
+  const base = rotation ? `rotate(${rotation}rad)` : '';
+  el.style.transform = base;
+  const actual = el.getBoundingClientRect().width;
+  if (actual > 0.5) {
+    el.style.transform = `${base} scaleX(${width / actual})`.trim();
+  }
+}
 
 function DefaultLoading() {
   return (

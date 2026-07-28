@@ -10,6 +10,7 @@ pub mod geom;
 pub mod inherit;
 pub mod paint;
 pub mod preset;
+#[cfg(feature = "tables")]
 pub mod table;
 pub mod text;
 
@@ -480,15 +481,30 @@ fn emit_graphic(
     dl: &mut DisplayList,
 ) {
     match content {
-        GraphicContent::Table(t) => table::layout_table(
-            t,
-            box_rect,
-            ctx.resolver,
-            ctx.pres,
-            ctx.measure,
-            part,
-            &mut dl.commands,
-        ),
+        GraphicContent::Table(t) => {
+            // Tables are optional at compile time. The model and the parser stay — they
+            // are small, and the shape still has to be understood to be skipped — but the
+            // layout and the built-in style catalogue are the largest separable block in
+            // the crate, and a deck with no tables should not carry them.
+            #[cfg(feature = "tables")]
+            table::layout_table(
+                t,
+                box_rect,
+                ctx.resolver,
+                ctx.pres,
+                ctx.measure,
+                part,
+                &mut dl.commands,
+            );
+            #[cfg(not(feature = "tables"))]
+            {
+                let _ = t;
+                log::debug!(
+                    "built without the `tables` feature; {} left empty",
+                    shape.name
+                );
+            }
+        }
         GraphicContent::Chart(rid) => {
             // Charts are optional at compile time: a deck without them should not carry
             // a tenth of the core it never executes. Without the feature the frame is

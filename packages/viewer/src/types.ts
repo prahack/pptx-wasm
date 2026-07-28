@@ -89,6 +89,17 @@ export interface PresentationViewerProps {
   zoom?: number;
   /** Respond to arrow keys, Page Up/Down, Home/End. Default true. */
   keyboard?: boolean;
+  /**
+   * Lay a transparent, selectable copy of the slide's text over the canvas.
+   *
+   * A canvas draws pixels, so its text cannot be selected or copied with the mouse. This
+   * places a positioned `<span>` per run on top of it, invisible but selectable — the
+   * technique pdf.js uses. Screen readers and find-in-page already work without it, from
+   * the off-screen text block the component always renders.
+   *
+   * Off by default: it costs a DOM node per run, which on a dense slide is hundreds.
+   */
+  selectableText?: boolean;
   /** Where to load the WASM module from. Defaults to the bundled one. */
   wasm?: WasmSource;
   /** Rendered instead of the canvas while the deck loads. */

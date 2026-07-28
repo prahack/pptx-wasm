@@ -8,6 +8,7 @@ pub mod presentation;
 pub mod shapes;
 pub mod slide;
 pub mod table;
+#[cfg(feature = "tables")]
 pub mod table_style;
 pub mod text;
 pub mod theme;
