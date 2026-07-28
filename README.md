@@ -36,6 +36,52 @@ Two conventions carry a lot of weight, and both are explained in
 renderer abstraction, and why there is no Web Worker — each with the measurements behind
 it.
 
+## How it compares
+
+Against the six other browser-side pptx renderers on npm, over the 11 fixtures every
+engine renders. Payload is gzipped and measured by bundling each engine with esbuild;
+`cold` is a first render in a fresh page including module and WASM instantiation; `warm`
+is opening another deck in the same page; `content` is the share of *inked* pixels
+differing from the LibreOffice render.
+
+| engine | payload | cold | warm | content |
+|---|---:|---:|---:|---:|
+| [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 20.6 ms | 2.9 ms | 61.33% |
+| [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 38.3 ms | 9.4 ms | 25.39% |
+| [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 102.8 ms | 38.9 ms | 23.05% |
+| **pptx-viewer** (this project) | **319 KB** | **29.2 ms** | **2.0 ms** | **20.53%** |
+| [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 94.1 ms | 5.9 ms | 20.42% |
+| [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 93.1 ms | 5.2 ms | 28.59% |
+| [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 223.6 ms | 27.4 ms | 63.17% |
+
+`npm run compare` reproduces this; `-- --file=deck.pptx` scores your own deck.
+
+**Where this project leads.** Speed against the engines that render accurately: 3.2×
+faster cold and 3.0× faster warm than @aiden0z/pptx-renderer, the only one whose fidelity
+matches. (@jvmr/pptx-to-html starts faster still, at 20.6 ms — its content figure says
+what that buys.) And *structural* coverage, which is what the content figure is actually
+good at detecting:
+
+| | ours | @aiden0z | pptx-preview | pptx-glimpse | vanilla |
+|---|---:|---:|---:|---:|---:|
+| tables (`m5a`) | **1.65%** | 2.16% | 62.07% | 62.20% | 43.31% |
+| preset shapes (`m3`) | **0.66%** | 1.43% | 4.71% | 5.78% | 72.01% |
+
+**Where it does not.** It is *not* the smallest — fourth of seven. And on fidelity it is
+tied with @aiden0z/pptx-renderer (20.53% vs 20.42%), not ahead; that engine is the real
+competition, at 10% more payload and 3.2× the cold time.
+
+**What the content figure cannot tell you.** On the text-only fixture every engine scores
+46–49%, because that is measuring font rasterisation against LibreOffice rather than
+correctness. Read it on structural fixtures, not textual ones. And on the tiled-fill
+fixture the oracle is simply wrong — engines that stretch the tile, as it does, score
+*better* than engines that repeat it correctly. See the oracle discussion under
+[Testing](#testing) before drawing conclusions from any single row.
+
+Two of these packages do not install cleanly: `pptxviewjs` imports `chart.js/auto` and
+`pptx-vanilla-viewer` imports `three`, neither declared as a dependency. Both are
+installed explicitly in `examples/comparison` and counted in their payload.
+
 ## Getting set up
 
 ```sh
@@ -69,7 +115,8 @@ outright, so you can work on the Rust without the whole toolchain installed.
 | `npm run test:golden` | render every fixture and pixel-diff against LibreOffice |
 | `npm run test:golden -- --suite=m2` | one suite |
 | `npm run test:browsers` | render every fixture in Chromium, Firefox and WebKit |
-| `npm run bench` | performance numbers |
+| `npm run bench` | performance numbers for this renderer alone |
+| `npm run compare` | benchmark against the six other npm pptx renderers |
 | `npm run fixtures` | regenerate the `.pptx` fixtures |
 | `npm test` | all three test layers in sequence |
 
@@ -122,6 +169,7 @@ rasteriser drew it differently, which is the most common ambiguity in this proje
 | `crates/wasm` | the wasm-bindgen surface — deliberately narrow |
 | `packages/viewer` | the TypeScript API and the React component |
 | `examples/basic` | a small app using only the documented API |
+| `examples/comparison` | every engine side by side on the same deck, including your own |
 | `fixtures/` | `gen.py`, which builds every fixture the golden suite uses |
 | `tests/golden/` | the oracle, the runner, the bench, the cross-browser check |
 
