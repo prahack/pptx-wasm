@@ -9,7 +9,7 @@
 //! absolute value for a few presets) and are normalised here.
 
 use std::collections::HashMap;
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_1_SQRT_2, PI};
 
 use crate::dl::{Path, Rect};
 use crate::model::geometry::{default_adjustments, PathFillMode};
@@ -56,6 +56,83 @@ pub fn faces(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Vec
                     stroke: true,
                 },
             ]
+        }
+        // Cylinders and the document stack are several closed outlines that overlap.
+        // Concatenated into one path they cancel under the non-zero rule and come out as
+        // white holes, so each is its own face and each is filled in its own right.
+        "flowChartMagneticDisk" => {
+            let ry = h / 6.0;
+            let mut body = Path::new();
+            body.move_to(0.0, ry);
+            body.arc_to(w / 2.0, ry, w / 2.0, ry, PI, PI);
+            body.line_to(w, h - ry);
+            body.arc_to(w / 2.0, h - ry, w / 2.0, ry, 0.0, PI);
+            body.close();
+            let lid = Path::ellipse(Rect::new(0.0, 0.0, w, ry * 2.0));
+            vec![
+                Face {
+                    path: body,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+                Face {
+                    path: lid,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+            ]
+        }
+        "flowChartMagneticDrum" => {
+            let rx = w / 6.0;
+            let mut body = Path::new();
+            body.move_to(rx, 0.0);
+            body.arc_to(rx, h / 2.0, rx, h / 2.0, -PI / 2.0, -PI);
+            body.line_to(w - rx, h);
+            body.arc_to(w - rx, h / 2.0, rx, h / 2.0, PI / 2.0, -PI);
+            body.close();
+            let cap = Path::ellipse(Rect::new(w - rx * 2.0, 0.0, rx * 2.0, h));
+            vec![
+                Face {
+                    path: body,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+                Face {
+                    path: cap,
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                },
+            ]
+        }
+        "flowChartMultidocument" => {
+            let (ox, oy) = (w * 0.08, h * 0.12);
+            let (bw, bh) = (w - ox * 2.0, h - oy * 2.0);
+            let doc = |x: f32, y: f32| -> Path {
+                let wave = bh * 0.14;
+                let mut d = Path::new();
+                d.move_to(x, y)
+                    .line_to(x + bw, y)
+                    .line_to(x + bw, y + bh - wave)
+                    .cubic_to(
+                        x + bw * 0.75,
+                        y + bh,
+                        x + bw * 0.25,
+                        y + bh - wave * 2.0,
+                        x,
+                        y + bh - wave,
+                    );
+                d.close();
+                d
+            };
+            // Back to front, so the nearest sheet overlaps those behind it.
+            [(ox * 2.0, 0.0), (ox, oy), (0.0, oy * 2.0)]
+                .into_iter()
+                .map(|(x, y)| Face {
+                    path: doc(x, y),
+                    fill: PathFillMode::Normal,
+                    stroke: true,
+                })
+                .collect()
         }
         "cube" => {
             let d = b.cube_d();
@@ -169,6 +246,27 @@ const SUPPORTED: &[&str] = &[
     "flowChartInputOutput",
     "flowChartDocument",
     "flowChartPredefinedProcess",
+    "flowChartInternalStorage",
+    "flowChartMultidocument",
+    "flowChartPreparation",
+    "flowChartManualInput",
+    "flowChartManualOperation",
+    "flowChartOffpageConnector",
+    "flowChartPunchedCard",
+    "flowChartPunchedTape",
+    "flowChartSummingJunction",
+    "flowChartOr",
+    "flowChartCollate",
+    "flowChartSort",
+    "flowChartExtract",
+    "flowChartMerge",
+    "flowChartOnlineStorage",
+    "flowChartDelay",
+    "flowChartDisplay",
+    "flowChartMagneticDisk",
+    "flowChartMagneticDrum",
+    "flowChartMagneticTape",
+    "flowChartOfflineStorage",
     "pie",
     "chord",
     "arc",
@@ -605,6 +703,277 @@ impl Builder {
                     .cubic_to(w * 0.75, h, w * 0.25, h - wave * 2.0, 0.0, h - wave)
                     .close();
                 p
+            }
+            // ---- the rest of the flowchart family ------------------------------
+            // ECMA-376 gives these fixed fractions of the box rather than adjustments,
+            // so there is nothing to tune: the numbers below are the spec's.
+            "flowChartInternalStorage" => {
+                let (x1, y1) = (w * 0.125, h * 0.125);
+                let outer = Path::rect(self.rect());
+                let mut rules = Path::new();
+                rules
+                    .move_to(x1, 0.0)
+                    .line_to(x1, h)
+                    .move_to(0.0, y1)
+                    .line_to(w, y1);
+                append(outer, &rules)
+            }
+            "flowChartPreparation" => {
+                // A hexagon at fixed fifths, unlike `hexagon` which is adjustable.
+                let x1 = w / 5.0;
+                let mut p = Path::new();
+                p.move_to(0.0, h / 2.0)
+                    .line_to(x1, 0.0)
+                    .line_to(w - x1, 0.0)
+                    .line_to(w, h / 2.0)
+                    .line_to(w - x1, h)
+                    .line_to(x1, h)
+                    .close();
+                p
+            }
+            "flowChartManualInput" => {
+                let y1 = h / 5.0;
+                let mut p = Path::new();
+                p.move_to(0.0, y1)
+                    .line_to(w, 0.0)
+                    .line_to(w, h)
+                    .line_to(0.0, h)
+                    .close();
+                p
+            }
+            "flowChartManualOperation" => {
+                let x1 = w / 5.0;
+                let mut p = Path::new();
+                p.move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w - x1, h)
+                    .line_to(x1, h)
+                    .close();
+                p
+            }
+            "flowChartOffpageConnector" => {
+                let y1 = h * 0.8;
+                let mut p = Path::new();
+                p.move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w, y1)
+                    .line_to(w / 2.0, h)
+                    .line_to(0.0, y1)
+                    .close();
+                p
+            }
+            "flowChartPunchedCard" => {
+                // The corner cut is one length used on both axes, as the spec writes it.
+                let d = h / 5.0;
+                let mut p = Path::new();
+                p.move_to(0.0, d)
+                    .line_to(d, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w, h)
+                    .line_to(0.0, h)
+                    .close();
+                p
+            }
+            "flowChartPunchedTape" => {
+                // A ribbon whose top and bottom edges each make one S-shaped step, low on
+                // the left and high on the right, so the thickness stays constant. Not a
+                // full sine period — two humps looks like a plausible "wavy tape" and is
+                // a completely different shape, worth 44% of the cell against the oracle.
+                let y1 = h / 5.0;
+                let mut p = Path::new();
+                p.move_to(0.0, y1);
+                p.cubic_to(w * 0.5, y1, w * 0.5, 0.0, w, 0.0);
+                p.line_to(w, h - y1);
+                p.cubic_to(w * 0.5, h - y1, w * 0.5, h, 0.0, h);
+                p.close();
+                p
+            }
+            "flowChartSummingJunction" => {
+                // A circle crossed by its two 45-degree diameters.
+                let outer = Path::ellipse(self.rect());
+                let (cx, cy) = (w / 2.0, h / 2.0);
+                let (dx, dy) = (w / 2.0 * FRAC_1_SQRT_2, h / 2.0 * FRAC_1_SQRT_2);
+                let mut cross = Path::new();
+                cross
+                    .move_to(cx - dx, cy - dy)
+                    .line_to(cx + dx, cy + dy)
+                    .move_to(cx + dx, cy - dy)
+                    .line_to(cx - dx, cy + dy);
+                append(outer, &cross)
+            }
+            "flowChartOr" => {
+                let outer = Path::ellipse(self.rect());
+                let mut cross = Path::new();
+                cross
+                    .move_to(w / 2.0, 0.0)
+                    .line_to(w / 2.0, h)
+                    .move_to(0.0, h / 2.0)
+                    .line_to(w, h / 2.0);
+                append(outer, &cross)
+            }
+            "flowChartCollate" => {
+                // Two triangles meeting at the centre — the winding makes the hourglass.
+                let mut p = Path::new();
+                p.move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(0.0, h)
+                    .line_to(w, h)
+                    .close();
+                p
+            }
+            "flowChartSort" => {
+                let mut outer = Path::new();
+                outer
+                    .move_to(w / 2.0, 0.0)
+                    .line_to(w, h / 2.0)
+                    .line_to(w / 2.0, h)
+                    .line_to(0.0, h / 2.0)
+                    .close();
+                let mut rule = Path::new();
+                rule.move_to(0.0, h / 2.0).line_to(w, h / 2.0);
+                append(outer, &rule)
+            }
+            "flowChartExtract" => {
+                let mut p = Path::new();
+                p.move_to(w / 2.0, 0.0)
+                    .line_to(w, h)
+                    .line_to(0.0, h)
+                    .close();
+                p
+            }
+            "flowChartMerge" => {
+                let mut p = Path::new();
+                p.move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w / 2.0, h)
+                    .close();
+                p
+            }
+            "flowChartOfflineStorage" => {
+                // A downward triangle with a rule near its apex end, its ends meeting
+                // the two slanted edges rather than floating past them.
+                let mut outer = Path::new();
+                outer
+                    .move_to(0.0, 0.0)
+                    .line_to(w, 0.0)
+                    .line_to(w / 2.0, h)
+                    .close();
+                let t = 0.8_f32;
+                let y = h * t;
+                let (x0, x1) = (w / 2.0 * t, w - w / 2.0 * t);
+                let mut rule = Path::new();
+                rule.move_to(x0, y).line_to(x1, y);
+                append(outer, &rule)
+            }
+            "flowChartOnlineStorage" => {
+                // A tape spool seen edge-on: the left cap bulges *out* past the box's
+                // left edge line, and the right edge is bitten *in* by the same radius.
+                // Getting these the wrong way round mirrors the shape, which reads as
+                // plausible on its own and is obvious beside the reference.
+                let rx = w / 6.0;
+                let mut p = Path::new();
+                p.move_to(rx, 0.0);
+                p.line_to(w, 0.0);
+                // Concave right edge, bulging left to `w - rx`.
+                p.arc_to(w, h / 2.0, rx, h / 2.0, -PI / 2.0, -PI);
+                p.line_to(rx, h);
+                // Convex left cap, reaching x = 0.
+                p.arc_to(rx, h / 2.0, rx, h / 2.0, PI / 2.0, PI);
+                p.close();
+                p
+            }
+            "flowChartDelay" => {
+                // Square on the left, semicircular on the right.
+                let mut p = Path::new();
+                p.move_to(0.0, 0.0);
+                p.line_to(w / 2.0, 0.0);
+                p.arc_to(w / 2.0, h / 2.0, w / 2.0, h / 2.0, -PI / 2.0, PI);
+                p.line_to(0.0, h);
+                p.close();
+                p
+            }
+            "flowChartDisplay" => {
+                // Pointed on the left, rounded on the right.
+                let x1 = w / 6.0;
+                let mut p = Path::new();
+                p.move_to(0.0, h / 2.0);
+                p.line_to(x1, 0.0);
+                p.line_to(w - x1, 0.0);
+                p.arc_to(w - x1, h / 2.0, x1, h / 2.0, -PI / 2.0, PI);
+                p.line_to(x1, h);
+                p.close();
+                p
+            }
+            "flowChartMagneticDisk" => {
+                // Built by `faces()`; this is the silhouette.
+                // A cylinder: the same construction as `can`, at a fixed sixth.
+                let ry = h / 6.0;
+                let mut body = Path::new();
+                body.move_to(0.0, ry);
+                body.arc_to(w / 2.0, ry, w / 2.0, ry, PI, PI);
+                body.line_to(w, h - ry);
+                body.arc_to(w / 2.0, h - ry, w / 2.0, ry, 0.0, PI);
+                body.close();
+                let lid = Path::ellipse(Rect::new(0.0, 0.0, w, ry * 2.0));
+                append(body, &lid)
+            }
+            "flowChartMagneticDrum" => {
+                // Built by `faces()`; this is the silhouette.
+                // The same cylinder lying on its side.
+                let rx = w / 6.0;
+                let mut body = Path::new();
+                body.move_to(rx, 0.0);
+                body.arc_to(rx, h / 2.0, rx, h / 2.0, -PI / 2.0, -PI);
+                body.line_to(w - rx, h);
+                body.arc_to(w - rx, h / 2.0, rx, h / 2.0, PI / 2.0, -PI);
+                body.close();
+                let cap = Path::ellipse(Rect::new(w - rx * 2.0, 0.0, rx * 2.0, h));
+                append(body, &cap)
+            }
+            "flowChartMagneticTape" => {
+                // A circle whose bottom-right quadrant is squared off into the tape's
+                // foot. The arc runs bottom -> left -> top -> right, so every endpoint
+                // lands on a quadrant boundary; an arc that stops mid-quadrant puts its
+                // Bezier control points outside the circle and the path then reports a
+                // bounding box larger than its own shape.
+                let (cx, cy) = (w / 2.0, h / 2.0);
+                let mut p = Path::new();
+                p.move_to(cx, h);
+                p.arc_to(cx, cy, w / 2.0, h / 2.0, PI / 2.0, 3.0 * PI / 2.0);
+                p.line_to(w, h);
+                p.line_to(cx, h);
+                p.close();
+                p
+            }
+            "flowChartMultidocument" => {
+                // Built by `faces()`; this is the silhouette.
+                // Three stacked documents, offset up and to the right.
+                let (ox, oy) = (w * 0.08, h * 0.12);
+                let doc = |x: f32, y: f32, dw: f32, dh: f32| -> Path {
+                    let wave = dh * 0.14;
+                    let mut d = Path::new();
+                    d.move_to(x, y)
+                        .line_to(x + dw, y)
+                        .line_to(x + dw, y + dh - wave)
+                        // The trough control point sits exactly on the bottom edge, so
+                        // the wave reaches it and never passes it — a cubic stays inside
+                        // the hull of its control points.
+                        .cubic_to(
+                            x + dw * 0.75,
+                            y + dh,
+                            x + dw * 0.25,
+                            y + dh - wave * 2.0,
+                            x,
+                            y + dh - wave,
+                        );
+                    d.close();
+                    d
+                };
+                let bw = w - ox * 2.0;
+                let bh = h - oy * 2.0;
+                let mut p = doc(ox * 2.0, 0.0, bw, bh);
+                p = append(p, &doc(ox, oy, bw, bh));
+                append(p, &doc(0.0, oy * 2.0, bw, bh))
             }
             "flowChartPredefinedProcess" => {
                 let inset = w * 0.125;

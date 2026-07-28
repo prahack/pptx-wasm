@@ -81,6 +81,21 @@ Two things to do, in order:
    polygons and arcs — far easier than the star and hexagon work already done — and
    `is_supported()` already exists to assert coverage rather than let it regress silently.
 
+### 2b. Refine five preset curves — *follow-up from 2*
+
+The 22 new presets landed and `m7a` now diffs 2.16% against the oracle, but that residue
+is not evenly spread. Measured per shape: `multidocument` 18.4%, `document` 14.4%,
+`punchedTape` 11.1%, `terminator` 10.8%, `inputOutput` 9.8%. The other 24 are all under
+5.2% and mostly pure antialiasing.
+
+The interesting part is that **three of those five — `document`, `terminator` and
+`inputOutput` — predate the flowchart work entirely.** They shipped in the first
+milestone, were never covered by a fixture, and nobody knew their wave, corner radius and
+slant were wrong. Adding coverage for a gap found a second gap underneath it.
+
+Each is a small correction against the reference render, and `m7a`'s tolerance should come
+down to under 1% once they land.
+
 ### 3. Payload: 319 KB → target ~220 KB
 
 Fourth of seven is the only axis where we lose to engines that also work. Two facts
@@ -202,6 +217,7 @@ unnecessary — worth deciding which before building either.
 
 ## Suggested order
 
+0. ~~Flowchart presets~~ — done: 22 implemented, `m7a` fixture added, 19/19 golden green.
 1. CI — cheap, and everything after it is safer with it in place.
 2. `twiggy` measurement, then chart/effects feature flags.
 3. PowerPoint spot-check — resolves the open `m4` question.

@@ -692,6 +692,77 @@ def gen_m5f() -> None:
     save(deck, "m5f-tile")
 
 
+# --------------------------------------------------------------------------- m7
+
+def gen_m7() -> None:
+    """The flowchart and action-button preset families.
+
+    These exist because a competitor was found to implement 43 of them against this
+    project's 9, and the other 34 fell back to their bounding rectangle — the exact
+    failure mode this project criticises other renderers for. Nothing in the suite
+    covered them, so the gap did not move a single number.
+
+    Process diagrams are among the most common things in a business deck, so a shape
+    silently becoming a blue rectangle is a loud bug that was completely invisible.
+    """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+
+    # Written as raw prst values rather than through MSO_SHAPE, because python-pptx maps
+    # several of its enum members onto the same preset (FLOWCHART_DATA is emitted as
+    # flowChartInputOutput), which would silently leave holes in the coverage this
+    # fixture exists to prove.
+    flow = [
+        "flowChartProcess", "flowChartAlternateProcess", "flowChartDecision",
+        "flowChartInputOutput", "flowChartPredefinedProcess", "flowChartInternalStorage",
+        "flowChartDocument", "flowChartMultidocument", "flowChartTerminator",
+        "flowChartPreparation", "flowChartManualInput", "flowChartManualOperation",
+        "flowChartConnector", "flowChartOffpageConnector", "flowChartPunchedCard",
+        "flowChartPunchedTape", "flowChartSummingJunction", "flowChartOr",
+        "flowChartCollate", "flowChartSort", "flowChartExtract", "flowChartMerge",
+        "flowChartOnlineStorage", "flowChartDelay", "flowChartMagneticTape",
+        "flowChartMagneticDisk", "flowChartMagneticDrum", "flowChartDisplay",
+        "flowChartOfflineStorage",
+    ]
+    buttons = [
+        "actionButtonBlank", "actionButtonHome", "actionButtonHelp",
+        "actionButtonInformation", "actionButtonForwardNext", "actionButtonBackPrevious",
+        "actionButtonBeginning", "actionButtonEnd", "actionButtonReturn",
+        "actionButtonDocument", "actionButtonSound", "actionButtonMovie",
+    ]
+
+    def grid(names: list[str], cols: int, cw: float, ch: float, pad: float) -> None:
+        deck = new_deck()
+        slide = blank(deck)
+        for i, prst in enumerate(names):
+            col, row = i % cols, i // cols
+            box = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(pad + col * cw), Inches(pad + row * ch),
+                Inches(cw - pad), Inches(ch - pad),
+            )
+            box.fill.solid()
+            box.fill.fore_color.rgb = RGBColor(0x4F, 0x81, 0xBD)
+            box.line.color.rgb = RGBColor(0x22, 0x22, 0x22)
+            # Swap the rectangle's geometry for the preset under test.
+            sp_pr = box._element.spPr
+            for child in list(sp_pr):
+                if child.tag == qn("a:prstGeom"):
+                    sp_pr.remove(child)
+            geom = etree.SubElement(sp_pr, qn("a:prstGeom"))
+            geom.set("prst", prst)
+            etree.SubElement(geom, qn("a:avLst"))
+            # prstGeom has to precede the fill in spPr's sequence.
+            sp_pr.remove(geom)
+            sp_pr.insert(0, geom)
+        return deck
+
+    deck = grid(flow, 6, 2.2, 1.5, 0.12)
+    save(deck, "m7a-flowchart")
+    deck = grid(buttons, 6, 2.2, 1.5, 0.12)
+    save(deck, "m7b-actionbutton")
+
+
 # --------------------------------------------------------------------------- m6
 
 def gen_m6() -> None:
@@ -780,6 +851,7 @@ GENERATORS = {
     "m5d": gen_m5d,
     "m5e": gen_m5e,
     "m5f": gen_m5f,
+    "m7": gen_m7,
     "m6": gen_m6,
     "bench": gen_bench,
 }

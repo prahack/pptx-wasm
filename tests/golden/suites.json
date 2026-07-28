@@ -108,6 +108,14 @@
       "reason": "Tiled bitmap fills, deliberately NOT compared against the oracle. LibreOffice ignores <a:tile> and stretches the image to fill the shape — the exact bug this fixture exists to catch. Diffing against it would invert the test: a correct repeating render scores ~4% while a regression back to stretching would score near zero, so the suite would pass loudest when the feature was broken. It compares against a reviewed reference instead, which catches regressions without pretending to verify fidelity. Fidelity here is argued from the spec and asserted in layout::paint::tests (scale and offset survive into the display list) — and the tolerance is tight because our own output should be deterministic.",
       "scoreAs": "excluded",
       "scoreAsReason": "LibreOffice ignores <a:tile> and stretches the image, so an engine that tiles correctly scores worse than one that repeats the oracle's bug. Scoring this rewards being wrong."
+    },
+    {
+      "id": "m7a",
+      "fixture": "m7a-flowchart.pptx",
+      "maxDiffRatio": 0.025,
+      "scoreAs": "structure",
+      "scoreAsReason": "Twenty-nine flowchart presets and no text at all.",
+      "reason": "The flowchart family, all 29 of it. This fixture exists because a capability diff against @aiden0z/pptx-renderer found 22 of these falling back to their bounding rectangle, and nothing in the suite noticed — a deck of process diagrams rendered as a grid of blue boxes and every number stayed green. Currently 2.16%, and the budget is deliberately close to it. Measured per shape, what is left is concentrated in five: multidocument 18.4%, document 14.4%, punchedTape 11.1%, terminator 10.8% and inputOutput 9.8%; the other 24 are all under 5.2% and most are pure antialiasing. Three of those five — document, terminator and inputOutput — predate this fixture entirely and are the more interesting finding: they were never covered, so nobody knew their curves and slants were off. Refining all five is tracked in ROADMAP.md; when that lands this number should fall under 1% and the tolerance with it."
     }
   ],
   "_scoreAs": [
