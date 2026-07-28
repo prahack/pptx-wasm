@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fast and dependency-free: the bulk of the suite, and the only job that has to pass
+  # for a change to be worth looking at. Layout is asserted against a synthetic text
+  # measurer, so none of this needs a browser or a font.
+  rust:
+    name: Rust — test, clippy, fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace
+      # The renderer's browser backends are behind a wasm32 cfg, so they are only
+      # type-checked when clippy is pointed at that target.
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p pptx-renderer --target wasm32-unknown-unknown -- -D warnings
+
+  # The pixel suite. Slower and needs LibreOffice, poppler, a Python venv and a browser,
+  # which is why it is a separate job rather than bolted onto the one above — a Rust
+  # failure should not wait on an apt install.
+  golden:
+    name: Golden — render and diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install the oracle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-impress poppler-utils
+
+      - name: Create the fixture venv
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install --quiet python-pptx Pillow
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Build the WASM and the package
+        run: npm run build:pkg
+
+      - name: Golden suite
+        run: npm run test:golden
+
+      # The renders and diffs are the first thing anyone wants when this fails, and they
+      # are gone the moment the runner is torn down.
+      - name: Upload renders and diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-output
+          path: |
+            tests/golden/out/actual
+            tests/golden/out/diff
+            tests/golden/out/trace
+          retention-days: 7
+
+  # Every fixture in three engines, checking that the text comes out identical. This is
+  # where the "Canvas2D measureText is good enough" decision gets tested against reality
+  # rather than argued about — see CLAUDE.md, Spike A.
+  browsers:
+    name: Cross-browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Create the fixture venv
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install --quiet python-pptx Pillow
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run build:pkg
+      - run: npm run test:browsers

@@ -1,0 +1,68 @@
+name: Comparison benchmark
+
+# Deliberately not on push or pull_request. This job installs six competing renderers
+# from npm and scores every engine against a LibreOffice render, which takes minutes and
+# depends on packages that change under us — two of them do not even declare all their
+# dependencies. A third party publishing a broken version should not turn a pull request
+# red, so this runs on a schedule and can be started by hand, and it is allowed to fail.
+on:
+  schedule:
+    - cron: '0 6 1 * *' # 06:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compare:
+    name: Against the field
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install the oracle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-impress poppler-utils
+
+      - name: Create the fixture venv
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install --quiet python-pptx Pillow
+
+      - run: npm ci
+      - name: Install the competing engines
+        run: npm install --prefix examples/comparison
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:pkg
+
+      - name: Benchmark
+        run: npm run compare | tee compare-output.txt
+
+      # The numbers in README.md are a snapshot with a date on them; this is how you find
+      # out they have drifted without re-running it by hand.
+      - name: Upload the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison
+          path: |
+            compare-output.txt
+            tests/golden/out/compare
+          retention-days: 30

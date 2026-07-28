@@ -135,19 +135,22 @@ down. **Measure with `twiggy` before cutting anything** — the 11.5%-of-source 
 proxy for binary size, not a measurement of it, and monomorphised generic code does not
 track line count.
 
-### 4. CI — *open*
+### 4. CI — ~~**done**~~
 
-There is none. The last two sessions found five real bugs — four preset-geometry errors
-and a tiled-fill regression — that the golden suite either hid behind a loose tolerance or
-would have passed through entirely. That suite is the main defence against exactly this
-class of error, and nothing runs it automatically.
+`.github/workflows/ci.yml`, three jobs on every push and pull request:
 
-- GitHub Actions: `cargo test`, `clippy`, `fmt`, then the golden suite.
-- LibreOffice and poppler in the runner image; cache the `.venv` and the Cargo registry.
-- Run `npm run compare` on a schedule, not per-PR — it takes minutes and depends on
-  third-party packages that change under us.
+- **rust** — `fmt --check`, `cargo test --workspace`, and clippy at `-D warnings` on both
+  the host and `wasm32-unknown-unknown`. No apt, no browser, no venv; it is the job that
+  should fail first and fastest.
+- **golden** — LibreOffice, poppler, the fixture venv and Chromium, then the pixel suite.
+  On failure it uploads the renders, the diffs and the traces, which are the first things
+  anyone wants and are otherwise destroyed with the runner.
+- **browsers** — every fixture in Chromium, Firefox and WebKit.
 
-Effort: low. Value: high — this is what keeps the fidelity number honest between releases.
+`.github/workflows/compare.yml` runs the comparison benchmark monthly and on demand, and
+is explicitly `continue-on-error`. It installs six competing renderers from npm, two of
+which do not declare all their dependencies; a third party publishing a broken version
+must not turn a pull request red.
 
 ---
 
@@ -233,7 +236,7 @@ unnecessary — worth deciding which before building either.
 ## Suggested order
 
 0. ~~Flowchart presets~~ — done: 22 implemented, `m7a` fixture added, 19/19 golden green.
-1. CI — cheap, and everything after it is safer with it in place.
+1. ~~CI~~ — done.
 2. `twiggy` measurement, then chart/effects feature flags.
 3. PowerPoint spot-check — resolves the open `m4` question.
 4. Decide SVG backend vs. text-layer overlay, then build the winner.
