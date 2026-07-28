@@ -16,6 +16,7 @@ jobs:
   rust:
     name: Rust — test, clippy, fmt
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +40,9 @@ jobs:
   golden:
     name: Golden — render and diff
     runs-on: ubuntu-latest
+    # LibreOffice cold-starts for each fixture on a fresh runner, so this is slow — but a
+    # hang would otherwise sit there for six hours before GitHub gave up on it.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -95,6 +99,7 @@ jobs:
   browsers:
     name: Cross-browser
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
