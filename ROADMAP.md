@@ -51,7 +51,37 @@ without a shaper). That is everything needed to lay transparent, correctly-posit
 Impact: removes the one reason to pick a DOM renderer over this. Effort: medium. Risk:
 low — purely additive, cannot regress the raster path.
 
-### 2. Payload: 319 KB → target ~220 KB
+### 2. The flowchart and action-button presets
+
+Found by reading @aiden0z/pptx-renderer — the one engine whose fidelity is close to ours —
+to see what it does differently. It supports **43** `flowChart*` and `actionButton*`
+shapes. We support **9**. The other **34** fall back to their bounding rectangle.
+
+A probe deck of twelve ordinary flowchart shapes renders like this:
+
+| this renderer | @aiden0z/pptx-renderer |
+|---|---|
+| ![ours](docs/flowchart-ours.png) | ![theirs](docs/flowchart-aiden0z.png) |
+
+Ten of the twelve are plain blue rectangles. Only `flowChartDecision` and `flowChartData`
+come out right, because a diamond and a parallelogram happen to exist for other presets.
+
+This matters more than the count suggests. It is the exact failure mode this project
+criticises @jvmr/pptx-to-html for in the comparison — "hexagon, diamond, chevron, star,
+plus, can, cube and donut all fall back to a plain rectangle" — and process diagrams are
+one of the most common things in a business deck. It also does not show up anywhere in the
+benchmark, because no fixture contains a flowchart. **The structural score of 1.15% is
+measured on shapes we chose to implement.**
+
+Two things to do, in order:
+
+1. Add a flowchart fixture to `fixtures/gen.py` and to the golden suite, so the gap is
+   visible in the numbers rather than only in a probe.
+2. Implement the 34 missing presets from the ECMA-376 formulas. They are mostly simple
+   polygons and arcs — far easier than the star and hexagon work already done — and
+   `is_supported()` already exists to assert coverage rather than let it regress silently.
+
+### 3. Payload: 319 KB → target ~220 KB
 
 Fourth of seven is the only axis where we lose to engines that also work. Two facts
 already measured, so the obvious moves are ruled out:
@@ -75,7 +105,7 @@ down. **Measure with `twiggy` before cutting anything** — the 11.5%-of-source 
 proxy for binary size, not a measurement of it, and monomorphised generic code does not
 track line count.
 
-### 3. CI
+### 4. CI
 
 There is none. The last two sessions found five real bugs — four preset-geometry errors
 and a tiled-fill regression — that the golden suite either hid behind a loose tolerance or
@@ -93,7 +123,7 @@ Effort: low. Value: high — this is what keeps the fidelity number honest betwe
 
 ## P1 — fidelity confidence
 
-### 4. Validate against PowerPoint itself
+### 5. Validate against PowerPoint itself
 
 The known gap recorded in `CLAUDE.md` and never closed. Everything has been validated
 against LibreOffice, which leaves a whole class of error uncaught: cases where LibreOffice
@@ -110,7 +140,7 @@ master exactly. That is consistent with font substitution rather than a resoluti
 but it has not been confirmed against PowerPoint, and until it is, "our sizes are right"
 is an argument rather than a fact.
 
-### 5. EMF/WMF images
+### 6. EMF/WMF images
 
 No browser decodes these, and they are common in real decks — anything pasted from Excel
 or older Office arrives as a metafile. Today they render as their fallback image where the
@@ -121,7 +151,7 @@ dedicated `emf-converter` package rather than solving it inline. Options, cheape
 prefer the fallback raster more aggressively; parse the EMF subset that covers pasted
 charts; or treat it as out of scope and document it clearly.
 
-### 6. The remaining coverage gaps
+### 7. The remaining coverage gaps
 
 In rough order of how often they appear in real decks: soft edges, 3-D bevels, SmartArt
 (currently falls back to its cached image), OLE embeddings, animations and transitions.
@@ -132,7 +162,7 @@ explicitly rather than leaving on a list forever.
 
 ## P2 — reach
 
-### 7. An SVG backend
+### 8. An SVG backend
 
 Strategically the highest-leverage item on this list, because one backend closes three
 gaps at once:
@@ -149,7 +179,7 @@ is the guard that keeps it honest.
 This overlaps with P0.1. If the SVG backend happens, the text-layer overlay may be
 unnecessary — worth deciding which before building either.
 
-### 8. Framework wrappers and a demo
+### 9. Framework wrappers and a demo
 
 - Vue and Svelte wrappers. The core is framework-agnostic; only React has a wrapper today.
 - A hosted demo. `examples/comparison` already renders seven engines side by side on a
@@ -177,3 +207,28 @@ unnecessary — worth deciding which before building either.
 3. PowerPoint spot-check — resolves the open `m4` question.
 4. Decide SVG backend vs. text-layer overlay, then build the winner.
 5. Wrappers and the hosted demo.
+
+---
+
+## What reading the competition actually taught us
+
+Worth recording, because the useful findings were not the ones the benchmark surfaced.
+
+**@aiden0z/pptx-renderer is a hybrid: SVG for shapes, HTML for text, no canvas at all**
+(95 `createElementNS` calls, zero `getContext('2d')`). That single choice buys it text
+selection, Ctrl-F and screen-reader support for free — the P0.1 gap here — and costs it
+3x on warm render, 6.0 ms against 2.0 ms. It is the clearest evidence that the SVG backend
+in P2.8 is the right shape of idea, and that it will not be free.
+
+**Its text is measured with `measureText` exactly as ours is**, then emitted as DOM and
+left to CSS for final line breaking, where we compute wrap points ourselves and place each
+run. It scores 26.93% on text against our 27.43%. Half a point inside a three-point noise
+band is not evidence of anything, and no conclusion should be drawn from it — but it is
+the only axis where the architectures visibly diverge, so it is where to look if the text
+figure ever becomes a real gap.
+
+**The benchmark did not find the flowchart hole; reading their source did.** A comparative
+score can only measure the fixtures you thought to write, and every fixture here was
+written by the same person who chose which presets to implement. That is a blind spot the
+numbers cannot see past, and it is worth periodically diffing capability lists against a
+competitor rather than only diffing scores.
