@@ -1,5 +1,8 @@
 # pptx-wasm
 
+[![npm](https://img.shields.io/npm/v/pptx-wasm.svg)](https://www.npmjs.com/package/pptx-wasm)
+[![licence](https://img.shields.io/npm/l/pptx-wasm.svg)](https://github.com/prahack/pptx-wasm/blob/main/LICENSE)
+
 Render PowerPoint `.pptx` files in the browser. No server, no conversion step, no upload —
 the file is parsed and drawn on the client.
 
@@ -19,6 +22,11 @@ npm install pptx-wasm
 ```
 
 React is an optional peer dependency; you only need it for `pptx-wasm/react`.
+
+<img src="https://raw.githubusercontent.com/prahack/pptx-wasm/main/docs/shapes.png" alt="A slide of preset shapes rendered by pptx-wasm" width="640">
+
+*Preset geometry built from the ECMA-376 formulas, including the lit and shaded faces of
+`can` and `cube`.*
 
 ## How it compares
 

@@ -1,15 +1,35 @@
 # pptx-wasm
 
-A browser-native, read-only `.pptx` renderer. Rust compiled to WebAssembly does the
-parsing, layout and drawing; TypeScript wraps it; React is optional. Nothing is uploaded
-and nothing is converted server-side.
+[![npm](https://img.shields.io/npm/v/pptx-wasm.svg)](https://www.npmjs.com/package/pptx-wasm)
+[![bundle](https://img.shields.io/badge/gzipped-319%20KB-blue.svg)](#how-it-compares)
+[![licence](https://img.shields.io/npm/l/pptx-wasm.svg)](LICENSE)
 
-For using the package, see [`packages/viewer/README.md`](packages/viewer/README.md).
-This file is about working on it.
+A browser-native, read-only `.pptx` renderer. Rust compiled to WebAssembly does the
+parsing, layout and drawing; TypeScript wraps it; React is optional. **Nothing is
+uploaded** — the file is parsed and drawn on the client, so a confidential deck never
+leaves the machine.
+
+The fastest of the browser pptx renderers that render a deck accurately, on both first
+load and subsequent slides. [See the numbers.](#how-it-compares)
+
+```sh
+npm install pptx-wasm
+```
 
 ```tsx
+import { PresentationViewer } from 'pptx-wasm/react';
+
 <PresentationViewer src="/deck.pptx" width="100%" height="100vh" />
 ```
+
+<img src="docs/shapes.png" alt="A slide of preset shapes rendered by pptx-wasm" width="640">
+
+*`m3-shapes.pptx` as this renderer draws it — preset geometry from the ECMA-376 formulas,
+including the lit and shaded faces of `can` and `cube`.*
+
+**Using the package?** [`packages/viewer/README.md`](packages/viewer/README.md) is the API
+reference. This file is about working on the project; [`ROADMAP.md`](ROADMAP.md) is where
+it goes next.
 
 ## How it fits together
 
@@ -65,7 +85,13 @@ The lead widens on structure, which is what the content figure genuinely discrim
 | preset shapes | **0.66%** | 1.43% | 4.71% | 5.78% | 72.01% |
 | effects | **0.32%** | 0.47% | 29.22% | 2.71% | 54.97% |
 
-`npm run compare` reproduces all of it; `-- --file=deck.pptx` scores your own deck.
+`npm run compare` reproduces all of it; `-- --file=deck.pptx` scores your own deck. The
+same app runs interactively, so differences are visible rather than argued about:
+
+<img src="docs/comparison.png" alt="Four pptx renderers drawing the same slide side by side" width="720">
+
+*The same deck in four engines. pptx-preview drops the five-pointed star entirely;
+pptxviewjs mis-draws the hexagon and the plus.*
 
 ### Reading it honestly
 
