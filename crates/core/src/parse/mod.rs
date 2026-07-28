@@ -1,6 +1,7 @@
 //! OOXML parsers. Every function here degrades: unknown elements are skipped, malformed
 //! values fall back to a documented default, and nothing panics on hostile input.
 
+#[cfg(feature = "charts")]
 pub mod chart;
 pub mod drawing;
 pub mod presentation;

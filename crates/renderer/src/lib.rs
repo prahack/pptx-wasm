@@ -20,6 +20,7 @@
 
 pub mod cull;
 pub mod record;
+pub mod textlayer;
 
 #[cfg(target_arch = "wasm32")]
 pub mod canvas2d;

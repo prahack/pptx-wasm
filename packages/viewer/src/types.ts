@@ -101,3 +101,27 @@ export interface PresentationViewerProps {
   onError?: (error: PptxError) => void;
   onSlideChange?: (index: number) => void;
 }
+
+/**
+ * One run of text on a slide, positioned in device pixels.
+ *
+ * Everything needed to lay a transparent, correctly-sized element over the canvas so the
+ * browser can handle selection, find-in-page and assistive technology — the things a
+ * canvas cannot do for itself.
+ */
+export interface TextLayerRun {
+  text: string;
+  /** Left end of the baseline, in device pixels. */
+  x: number;
+  y: number;
+  /** Measured advance width in device pixels. */
+  width: number;
+  /** Font size in device pixels. */
+  size: number;
+  /** A CSS `font-family` list. */
+  family: string;
+  weight: number;
+  italic: boolean;
+  /** Clockwise rotation in radians. */
+  rotation: number;
+}

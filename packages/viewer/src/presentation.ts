@@ -15,6 +15,7 @@ import {
   type RenderOptions,
   type SlideInfo,
   type WasmSource,
+  type TextLayerRun,
 } from './types.js';
 
 export interface OpenOptions {
@@ -212,6 +213,35 @@ export class Presentation {
   debugTrace(index: number, width = 960, height = 540): string {
     if (this.#destroyed || !this.#valid(index)) return '';
     return this.#inner.debugTrace(index, width, height);
+  }
+
+  /**
+   * Where the text is on a slide, in device pixels, for building a selectable layer.
+   *
+   * The positions come from the same walk the renderer uses, so a run culled from the
+   * canvas is absent here too — the overlay can never offer selectable text where
+   * nothing was painted.
+   *
+   * Pass the same options you passed to {@link render}, or the boxes will not line up.
+   */
+  textLayer(index: number, options: RenderOptions = {}): TextLayerRun[] {
+    if (this.#destroyed || !this.#valid(index)) return [];
+    const width = options.width ?? this.slideSize.width;
+    const height = options.height ?? this.slideSize.height;
+    const dpr = options.dpr ?? (globalThis.devicePixelRatio || 1);
+    const json = this.#inner.textLayer(
+      index,
+      width,
+      height,
+      dpr,
+      options.fit ?? 'contain',
+      options.zoom ?? 1,
+    );
+    try {
+      return JSON.parse(json) as TextLayerRun[];
+    } catch {
+      return [];
+    }
   }
 
   /** What a WebGPU backend would need for this slide. Diagnostic. */

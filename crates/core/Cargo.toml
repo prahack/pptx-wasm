@@ -14,3 +14,11 @@ log.workspace = true
 [dev-dependencies]
 # Fixtures are byte-for-byte .pptx files built in-memory by the test helpers.
 zip.workspace = true
+
+[features]
+default = ["charts"]
+# Chart rendering: `parse::chart`, `model::chart` and `layout::chart`. Roughly a tenth of
+# the compiled core, and a deck that has no charts pays for all of it. A build without it
+# still parses a slide containing a chart and renders everything else on it; the chart
+# frame is simply left empty.
+charts = []

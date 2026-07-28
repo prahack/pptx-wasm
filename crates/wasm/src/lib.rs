@@ -19,6 +19,7 @@ mod measure;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 use pptx_core::dl::{DisplayList, Fit, ImageId, View};
 use pptx_core::text::CachingMeasure;
@@ -46,6 +47,25 @@ fn parse_fit(s: &str) -> Fit {
 }
 
 /// An open presentation.
+/// Escapes a string for a JSON double-quoted scalar.
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 #[wasm_bindgen]
 pub struct Presentation {
     inner: pptx_core::Presentation,
@@ -275,6 +295,69 @@ impl Presentation {
             ..Default::default()
         };
         pptx_renderer::record::trace(dl, &view)
+    }
+
+    /// Where the text is on a slide, as JSON, so the host can lay a selectable and
+    /// screen-reader-visible layer over the canvas.
+    ///
+    /// The positions come from the same walk the drawing backends use, so a run that is
+    /// culled is absent here too and the overlay cannot offer selectable text where
+    /// nothing is painted.
+    #[wasm_bindgen(js_name = textLayer)]
+    pub fn text_layer(
+        &self,
+        index: usize,
+        viewport_w: f32,
+        viewport_h: f32,
+        dpr: f32,
+        fit: &str,
+        zoom: f32,
+    ) -> String {
+        if self.ensure_layout(index).is_none() {
+            return "[]".into();
+        }
+        let layouts = self.layouts.borrow();
+        let Some(dl) = layouts.get(&index) else {
+            return "[]".into();
+        };
+        let view = View {
+            viewport_w,
+            viewport_h,
+            dpr,
+            fit: parse_fit(fit),
+            zoom: if zoom > 0.0 { zoom } else { 1.0 },
+            ..Default::default()
+        };
+        let mut backend = pptx_renderer::textlayer::TextLayerRenderer::new();
+        if pptx_renderer::render(&mut backend, dl, &view).is_err() {
+            return "[]".into();
+        }
+        let mut out = String::from("[");
+        for (i, r) in backend.runs().iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            // Hand-written rather than serde: the crate has no serialiser and this is the
+            // only place that needs one.
+            let _ = write!(
+                out,
+                concat!(
+                    r#"{{"text":"{}","x":{:.2},"y":{:.2},"width":{:.2},"size":{:.2},"#,
+                    r#""family":"{}","weight":{},"italic":{},"rotation":{:.4}}}"#
+                ),
+                json_escape(&r.text),
+                r.x,
+                r.y,
+                r.width,
+                r.size,
+                json_escape(&r.family),
+                r.weight,
+                r.italic,
+                r.rotation,
+            );
+        }
+        out.push(']');
+        out
     }
 
     /// What a WebGPU backend would need for this slide. Exposed so Backend B's cost stays

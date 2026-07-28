@@ -21,5 +21,6 @@ export {
   type PresentationViewerProps,
   type RenderOptions,
   type SlideInfo,
+  type TextLayerRun,
   type WasmSource,
 } from './types.js';

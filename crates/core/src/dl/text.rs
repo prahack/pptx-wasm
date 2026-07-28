@@ -68,7 +68,12 @@ impl FontSpec {
     /// deliberate: measurement happens in the same unit system the display list uses,
     /// so advances come back in points and stay zoom-independent. The renderer's view
     /// transform is what turns points into device pixels.
-    pub fn to_css(&self) -> String {
+    /// Just the `font-family` list, quoted where a family name needs it.
+    ///
+    /// Separate from [`Self::to_css`] because the text layer sets the family and the size
+    /// independently: its size is in device pixels, not the authored points, so it cannot
+    /// use the shorthand.
+    pub fn families_css(&self) -> String {
         let mut families = String::new();
         for family in std::iter::once(&self.family).chain(self.fallbacks.iter()) {
             if !families.is_empty() {
@@ -85,6 +90,11 @@ impl FontSpec {
                 families.push('"');
             }
         }
+        families
+    }
+
+    pub fn to_css(&self) -> String {
+        let families = self.families_css();
         let style = match self.style {
             FontStyle::Italic => "italic ",
             FontStyle::Normal => "",

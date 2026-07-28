@@ -1,6 +1,7 @@
 //! The presentation model. Everything here is in EMUs and unresolved property terms;
 //! nothing knows about pixels, canvases, or the theme a given shape will end up under.
 
+#[cfg(feature = "charts")]
 pub mod chart;
 pub mod color;
 pub mod fill;
@@ -12,6 +13,7 @@ pub mod table_style;
 pub mod text;
 pub mod theme;
 
+#[cfg(feature = "charts")]
 pub use chart::Chart;
 pub use color::{ColorMod, ColorRef, ColorSpec, SchemeColor};
 pub use fill::{Effects, Fill, Line};
@@ -67,6 +69,7 @@ pub struct Presentation {
     pub(crate) media: RefCell<MediaRegistry>,
     /// `ppt/tableStyles.xml`, parsed on first use. Decks without a table never pay for it.
     pub(crate) table_styles: RefCell<Option<Rc<TableStyles>>>,
+    #[cfg(feature = "charts")]
     pub(crate) chart_cache: RefCell<HashMap<String, Rc<Chart>>>,
 }
 
@@ -86,11 +89,13 @@ impl Presentation {
             theme_cache: RefCell::new(HashMap::new()),
             media: RefCell::new(MediaRegistry::new()),
             table_styles: RefCell::new(None),
+            #[cfg(feature = "charts")]
             chart_cache: RefCell::new(HashMap::new()),
         }
     }
 
     /// Parses (or returns the cached) chart part.
+    #[cfg(feature = "charts")]
     pub fn chart(&self, part: &str) -> Option<Rc<Chart>> {
         if let Some(hit) = self.chart_cache.borrow().get(part) {
             return Some(Rc::clone(hit));

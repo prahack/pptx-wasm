@@ -4,6 +4,7 @@
 //! commands. It never touches a canvas, a font file, or a pixel — measurement comes in
 //! through a [`TextMeasure`], and everything goes out as a display list.
 
+#[cfg(feature = "charts")]
 pub mod chart;
 pub mod geom;
 pub mod inherit;
@@ -489,23 +490,36 @@ fn emit_graphic(
             &mut dl.commands,
         ),
         GraphicContent::Chart(rid) => {
-            // The chart part hangs off the slide, so the relationship resolves against
-            // `part` rather than against the chart's own name.
-            let target = ctx.pres.package().resolve_target(part, rid);
-            match target.and_then(|t| ctx.pres.chart(&t).map(|c| (t, c))) {
-                Some((chart_part, chart)) => chart::layout_chart(
-                    &chart,
-                    box_rect,
-                    ctx.resolver,
-                    ctx.pres,
-                    ctx.measure,
-                    &chart_part,
-                    &mut dl.commands,
-                ),
-                None => {
-                    log::debug!("chart {rid} on {} does not resolve", shape.name);
-                    placeholder_frame(box_rect, dl);
+            // Charts are optional at compile time: a deck without them should not carry
+            // a tenth of the core it never executes. Without the feature the frame is
+            // left empty and everything else on the slide still renders.
+            #[cfg(feature = "charts")]
+            {
+                // The chart part hangs off the slide, so the relationship resolves
+                // against `part` rather than against the chart's own name.
+                let target = ctx.pres.package().resolve_target(part, rid);
+                match target.and_then(|t| ctx.pres.chart(&t).map(|c| (t, c))) {
+                    Some((chart_part, chart)) => chart::layout_chart(
+                        &chart,
+                        box_rect,
+                        ctx.resolver,
+                        ctx.pres,
+                        ctx.measure,
+                        &chart_part,
+                        &mut dl.commands,
+                    ),
+                    None => {
+                        log::debug!("chart {rid} on {} does not resolve", shape.name);
+                    }
                 }
+            }
+            #[cfg(not(feature = "charts"))]
+            {
+                let _ = rid;
+                log::debug!(
+                    "built without the `charts` feature; {} left empty",
+                    shape.name
+                );
             }
         }
         GraphicContent::Unsupported { kind, .. } => {

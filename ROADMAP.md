@@ -31,25 +31,21 @@ we need to close the one capability gap that no amount of speed compensates for.
 
 ## P0 — the gaps that cost us adoption
 
-### 1. Text selection and accessibility — *open*
+### 1. Text selection and accessibility — **core done, overlay pending**
 
-**The single biggest competitive gap, and it is architectural.** A canvas renders pixels:
-text cannot be selected, copied, found with Ctrl-F, or read by a screen reader. Every
-DOM-based competitor gets all four for free. For a viewer — where reading is the entire
-use case — that is a serious objection, and no benchmark row captures it.
+`crates/renderer/src/textlayer.rs` is a fourth `Renderer` backend that reports where the
+text is instead of drawing it: string, baseline, measured width, size, family, weight,
+slant and rotation, all in device pixels. Exposed as `Presentation.textLayer(index,
+options)` in TypeScript.
 
-The fix does not require abandoning canvas. The display list already carries per-glyph
-positions and per-character advances (they exist so the WebGPU backend can position glyphs
-without a shaper). That is everything needed to lay transparent, correctly-positioned
-`<span>`s over the canvas — the same technique pdf.js uses for its text layer.
+It walks the display list through the same `render()` the drawing backends use, which is
+the property that matters: a run culled from the canvas is absent from the layer too, so
+the overlay can never offer selectable text where nothing was painted. That is asserted
+directly.
 
-- Emit a text-layer description from the display list: string, rect, font size, transform.
-- Render it as absolutely-positioned transparent text above the canvas.
-- Gate it behind an option; it costs DOM nodes on dense slides.
-- Verify with an actual screen reader, not by assuming.
-
-Impact: removes the one reason to pick a DOM renderer over this. Effort: medium. Risk:
-low — purely additive, cannot regress the raster path.
+**What remains is the DOM half** — rendering those runs as transparent positioned spans
+inside `<PresentationViewer/>`, behind an option, and checking it with a real screen
+reader rather than assuming. The data is all there; nothing else needs to change in Rust.
 
 ### 2. The flowchart and action-button presets — ~~**done**~~
 
@@ -111,29 +107,30 @@ control points, which for a quarter-circle sits about 5% outside the arc, so a s
 exactly inside its box reported a box 5% too large. That was rejecting correct geometry in
 the coverage test and, less visibly, making the renderer cull less than it could.
 
-### 3. Payload: 319 KB → target ~220 KB — *open*
+### 3. Payload — **charts gated; 315 KB → 288 KB without them**
 
-Fourth of seven is the only axis where we lose to engines that also work. Two facts
-already measured, so the obvious moves are ruled out:
+Measured with `twiggy` against a symbol build rather than guessed. By subsystem, on the
+unoptimised binary:
 
-- The release profile is already `opt-level="s"`, `lto=true`, `codegen-units=1`,
-  `panic="abort"`, `strip=true`.
-- `wasm-opt -Oz` instead of `-O3` saves **1 KB gzipped**. Not worth the speed risk.
-- Dependencies are already trimmed: `quick-xml` with no default features, `zip` with
-  `deflate` only.
-- 89.7% of the binary is the code section. It is our own compiled Rust, not metadata.
+| | bytes |
+|---|---|
+| other core | 205 KB |
+| tables (incl. the built-in style tables) | 62 KB |
+| charts | 48 KB |
+| text | 42 KB |
+| presets | 32 KB |
+| zip/inflate | 28 KB |
 
-So the remaining lever is **compiling less of it**, via Cargo features:
+`charts` is now a default-on Cargo feature on both `pptx-core` and `pptx-wasm`. Building
+without it saves **27 KB gzipped** — 315.5 KB → 288.4 KB — and a deck containing a chart
+still parses and renders everything else on the slide; only the chart frame is empty.
 
-- `charts` — `layout/chart.rs` and `parse/chart.rs` are 2,355 lines, ~11.5% of the core.
-  Most decks in a viewer context have no charts.
-- `effects` — shadows, glow, soft edges.
-- `tables` — smaller, but self-contained.
-
-Ship `pptx-wasm` with everything on (unchanged for existing users) and let people opt
-down. **Measure with `twiggy` before cutting anything** — the 11.5%-of-source figure is a
-proxy for binary size, not a measurement of it, and monomorphised generic code does not
-track line count.
+Two things this measurement changed. **Tables are bigger than charts** (62 KB against
+48 KB), almost entirely the hardcoded built-in style tables — `medium_style_2` alone is
+11.7 KB — so a `tables` feature is worth more than the chart one and is the obvious next
+cut. And the original ~220 KB target looks unreachable without giving up something a
+viewer needs: after charts and tables there is no large, separable block left, just the
+205 KB of parser, layout and inheritance that *is* the product.
 
 ### 4. CI — ~~**done**~~
 

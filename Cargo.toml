@@ -9,7 +9,7 @@ license = "MIT"
 rust-version = "1.82"
 
 [workspace.dependencies]
-pptx-core = { path = "crates/core" }
+pptx-core = { path = "crates/core", default-features = false }
 pptx-renderer = { path = "crates/renderer" }
 
 quick-xml = { version = "0.37", default-features = false }
