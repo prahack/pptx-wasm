@@ -24,68 +24,100 @@
       "id": "m0",
       "fixture": "m0-blank.pptx",
       "maxDiffRatio": 0.001,
-      "reason": "A blank slide is flat white. Anything above noise here is a real bug."
+      "reason": "A blank slide is flat white. Anything above noise here is a real bug.",
+      "scoreAs": "structure",
+      "scoreAsReason": "A blank slide. Any engine scoring above noise here is broken."
     },
     {
       "id": "m1",
       "fixture": "m1-basic.pptx",
       "maxDiffRatio": 0.02,
-      "reason": "One text box and one rectangle. The rectangle should be near-exact; the tolerance is almost entirely the text's antialiasing and hinting."
+      "reason": "One text box and one rectangle. The rectangle should be near-exact; the tolerance is almost entirely the text's antialiasing and hinting.",
+      "scoreAs": "text",
+      "scoreAsReason": "One textbox and one rectangle; the diff is dominated by the glyphs."
     },
     {
       "id": "m2",
       "fixture": "m2-text.pptx",
       "maxDiffRatio": 0.06,
-      "reason": "Text-heavy by design. LibreOffice's line breaking and glyph rasterisation differ from a browser's even when the wrap points agree, and a single word moving to another line lights up a large fraction of the slide. Watch the trend, not the absolute number; check wrap points via debugTrace when it moves."
+      "reason": "Text-heavy by design. LibreOffice's line breaking and glyph rasterisation differ from a browser's even when the wrap points agree, and a single word moving to another line lights up a large fraction of the slide. Watch the trend, not the absolute number; check wrap points via debugTrace when it moves.",
+      "scoreAs": "text",
+      "scoreAsReason": "Text by design."
     },
     {
       "id": "m3",
       "fixture": "m3-shapes.pptx",
       "maxDiffRatio": 0.006,
-      "reason": "Preset geometry. This sat at 3.5% while hiding four real bugs — a star5 whose waist was halved, a hexagon that missed the top and bottom of its box, can and cube drawing their lit faces as white holes, and arrowheads scaled by the shape's width instead of its shorter side. All four were plainly wrong to the eye and none moved the number past a third of the old budget, which is the lesson: on a suite of small shapes on a large slide, a loose tolerance is not a safety margin, it is a blindfold. Now 0.03-0.28% across the three slides, so 0.6% is roughly double the worst and leaves room for antialiasing along curved edges without leaving room for a shape to be the wrong shape. Look at the diff image when this moves; a geometry error is obvious there and invisible here."
+      "reason": "Preset geometry. This sat at 3.5% while hiding four real bugs — a star5 whose waist was halved, a hexagon that missed the top and bottom of its box, can and cube drawing their lit faces as white holes, and arrowheads scaled by the shape's width instead of its shorter side. All four were plainly wrong to the eye and none moved the number past a third of the old budget, which is the lesson: on a suite of small shapes on a large slide, a loose tolerance is not a safety margin, it is a blindfold. Now 0.03-0.28% across the three slides, so 0.6% is roughly double the worst and leaves room for antialiasing along curved edges without leaving room for a shape to be the wrong shape. Look at the diff image when this moves; a geometry error is obvious there and invisible here.",
+      "scoreAs": "structure",
+      "scoreAsReason": "Preset geometry, almost no text."
     },
     {
       "id": "m4",
       "fixture": "m4-template.pptx",
       "maxDiffRatio": 0.06,
-      "reason": "The inheritance suite: every shape takes its position, size and formatting from the layout and master. Text dominates the diff, so the tolerance matches m2. A *positional* error would blow well past this, which is exactly what this suite is for."
+      "reason": "The inheritance suite: every shape takes its position, size and formatting from the layout and master. Text dominates the diff, so the tolerance matches m2. A *positional* error would blow well past this, which is exactly what this suite is for.",
+      "scoreAs": "text",
+      "scoreAsReason": "Inheritance, but the visible diff is nearly all body text."
     },
     {
       "id": "m5a",
       "fixture": "m5a-tables.pptx",
       "maxDiffRatio": 0.06,
-      "reason": "Table borders land on half-pixel boundaries and LibreOffice snaps them differently, so every rule contributes a line of differing pixels. Cell text carries the rest."
+      "reason": "Table borders land on half-pixel boundaries and LibreOffice snaps them differently, so every rule contributes a line of differing pixels. Cell text carries the rest.",
+      "scoreAs": "structure",
+      "scoreAsReason": "Table rules, fills and banding dominate over the cell text."
     },
     {
       "id": "m5b",
       "fixture": "m5b-charts.pptx",
       "maxDiffRatio": 0.15,
-      "reason": "Deliberately the loosest suite. chart.xml carries data and formatting but no geometry, so every renderer computes the plot itself: LibreOffice picks its own axis scale, gap widths, label placement and legend metrics, and none of those are specified by the file. The structural things this suite actually guards are that the right number of bars/wedges appear, in the right order, with distinct series colours, inside the frame — a regression in any of those blows well past this figure. Judge it by the trend and by looking at the diff, not by the number alone."
+      "reason": "Deliberately the loosest suite. chart.xml carries data and formatting but no geometry, so every renderer computes the plot itself: LibreOffice picks its own axis scale, gap widths, label placement and legend metrics, and none of those are specified by the file. The structural things this suite actually guards are that the right number of bars/wedges appear, in the right order, with distinct series colours, inside the frame — a regression in any of those blows well past this figure. Judge it by the trend and by looking at the diff, not by the number alone.",
+      "scoreAs": "excluded",
+      "scoreAsReason": "chart.xml carries no geometry, so every renderer invents its own axis scale, gap widths and label placement. Scoring that compares arbitrary choices."
     },
     {
       "id": "m5c",
       "fixture": "m5c-effects.pptx",
       "maxDiffRatio": 0.02,
-      "reason": "Gradients, alpha compositing and the outer shadow all render, and this suite now sits near 0.1%. The remaining budget is for the Gaussian blur radius, which LibreOffice and a browser compute differently — matching it exactly would mean matching its implementation. Note what this tolerance can and cannot catch: an effect vanishing entirely only moves the figure by about half a percent, so the real guard against that is the unit tests in layout::tests, which assert the SetShadow command and its scope directly. Pixel tolerance is the wrong instrument for 'did this feature stop working'."
+      "reason": "Gradients, alpha compositing and the outer shadow all render, and this suite now sits near 0.1%. The remaining budget is for the Gaussian blur radius, which LibreOffice and a browser compute differently — matching it exactly would mean matching its implementation. Note what this tolerance can and cannot catch: an effect vanishing entirely only moves the figure by about half a percent, so the real guard against that is the unit tests in layout::tests, which assert the SetShadow command and its scope directly. Pixel tolerance is the wrong instrument for 'did this feature stop working'.",
+      "scoreAs": "structure",
+      "scoreAsReason": "Gradients, alpha and shadows."
     },
     {
       "id": "m5d",
       "fixture": "m5d-gradient-text.pptx",
       "maxDiffRatio": 0.05,
-      "reason": "A gradient-filled title on a dark background. The fixture exists because a gradient on text was being anchored to the slide origin rather than to the glyphs, so the title rendered one flat colour. Large-point bold text on a dark ground is the worst case for antialiasing differences — every glyph edge contributes — which is what the budget is for. What it guards is that the colour *varies* across the title; a regression to a flat fill moves the figure well past this."
+      "reason": "A gradient-filled title on a dark background. The fixture exists because a gradient on text was being anchored to the slide origin rather than to the glyphs, so the title rendered one flat colour. Large-point bold text on a dark ground is the worst case for antialiasing differences — every glyph edge contributes — which is what the budget is for. What it guards is that the colour *varies* across the title; a regression to a flat fill moves the figure well past this.",
+      "scoreAs": "text",
+      "scoreAsReason": "A gradient-filled title: text, and little else."
     },
     {
       "id": "m5e",
       "fixture": "m5e-hatch.pptx",
       "maxDiffRatio": 0.05,
-      "reason": "Preset hatch fills, as a slide background and as a shape fill. Both previously collapsed to a flat blended colour. LibreOffice draws preset hatches faithfully, so this is a real oracle comparison. The budget is for tile phase: the repeat is quantised to the device grid, so a sub-pixel difference in where the pattern starts shifts every stripe on the slide and lights up a large fraction of it while looking identical to the eye. A hatch regressing to a flat fill blows well past this."
+      "reason": "Preset hatch fills, as a slide background and as a shape fill. Both previously collapsed to a flat blended colour. LibreOffice draws preset hatches faithfully, so this is a real oracle comparison. The budget is for tile phase: the repeat is quantised to the device grid, so a sub-pixel difference in where the pattern starts shifts every stripe on the slide and lights up a large fraction of it while looking identical to the eye. A hatch regressing to a flat fill blows well past this.",
+      "scoreAs": "structure",
+      "scoreAsReason": "Hatch fills."
     },
     {
       "id": "m5f",
       "fixture": "m5f-tile.pptx",
       "oracle": false,
       "maxDiffRatio": 0.005,
-      "reason": "Tiled bitmap fills, deliberately NOT compared against the oracle. LibreOffice ignores <a:tile> and stretches the image to fill the shape — the exact bug this fixture exists to catch. Diffing against it would invert the test: a correct repeating render scores ~4% while a regression back to stretching would score near zero, so the suite would pass loudest when the feature was broken. It compares against a reviewed reference instead, which catches regressions without pretending to verify fidelity. Fidelity here is argued from the spec and asserted in layout::paint::tests (scale and offset survive into the display list) — and the tolerance is tight because our own output should be deterministic."
+      "reason": "Tiled bitmap fills, deliberately NOT compared against the oracle. LibreOffice ignores <a:tile> and stretches the image to fill the shape — the exact bug this fixture exists to catch. Diffing against it would invert the test: a correct repeating render scores ~4% while a regression back to stretching would score near zero, so the suite would pass loudest when the feature was broken. It compares against a reviewed reference instead, which catches regressions without pretending to verify fidelity. Fidelity here is argued from the spec and asserted in layout::paint::tests (scale and offset survive into the display list) — and the tolerance is tight because our own output should be deterministic.",
+      "scoreAs": "excluded",
+      "scoreAsReason": "LibreOffice ignores <a:tile> and stretches the image, so an engine that tiles correctly scores worse than one that repeats the oracle's bug. Scoring this rewards being wrong."
     }
+  ],
+  "_scoreAs": [
+    "`scoreAs` groups fixtures for the comparative benchmark (npm run compare), not for",
+    "the golden suite. Averaging text and structure together produces a number that says",
+    "nothing: on text-dominated fixtures every competent engine lands within a couple of",
+    "points of the others, because there the diff measures font rasterisation rather than",
+    "correctness. On structural fixtures the same metric spreads across a 40x range. They",
+    "are reported separately so the informative half is not buried under the floor.",
+    "`excluded` means the oracle cannot adjudicate the fixture at all; the reason is on",
+    "each suite."
   ]
 }

@@ -10,14 +10,19 @@ Of seven browser pptx renderers, on the 11 fixtures all of them render:
 
 | axis | rank | note |
 |---|---|---|
-| warm render | **1 of 7** | 2.0 ms; next is 2.9 ms (@jvmr, at 61% content error) |
-| cold start | 2 of 7 | 29.2 ms; only @jvmr is faster, and it renders far less |
-| fidelity | 2 of 7 | 20.53% vs @aiden0z's 20.42% — a tie inside the noise |
+| warm render | **1 of 7** | 2.0 ms; next is 3.0 ms (@jvmr, at 46.58% structural error) |
+| cold start | 2 of 7 | 31.0 ms; only @jvmr is faster, and it renders far less |
+| fidelity (structure) | **1 of 7** | 1.15% vs @aiden0z's 1.37%; the rest of the field is 12–59% |
+| fidelity (text) | 5 of 7 | 27.43%, the weakest of the five accurate engines, inside a 3-point band |
 | payload | 4 of 7 | 319 KB; @jvmr 45 KB, glimpse 167 KB, pptxviewjs 252 KB |
 
 Restricted to the five engines that render accurately at all, we are **first on cold and
-first on warm**. So the honest summary is: fastest accurate renderer, joint-best fidelity,
-mid-pack size.
+first on warm**. So the honest summary is: most accurate on structure, fastest of the
+accurate engines, mid-pack on size, and marginally last on text among that same group.
+
+Fidelity is reported split because pooling it destroys the signal: text-dominated fixtures
+put every competent engine within three points of the rest, so averaging them in drags a
+1.15% structural result up to 20% and makes a 50x spread look like a rounding error.
 
 That shapes the roadmap. We do not need to get faster. We need to stop losing on size, and
 we need to close the one capability gap that no amount of speed compensates for.

@@ -9,8 +9,9 @@ parsing, layout and drawing; TypeScript wraps it; React is optional. **Nothing i
 uploaded** — the file is parsed and drawn on the client, so a confidential deck never
 leaves the machine.
 
-The fastest of the browser pptx renderers that render a deck accurately, on both first
-load and subsequent slides. [See the numbers.](#how-it-compares)
+The most accurate of the browser pptx renderers on shapes, tables and effects — and the
+fastest of the accurate ones, on both first load and subsequent slides.
+[See the numbers.](#how-it-compares)
 
 ```sh
 npm install pptx-wasm
@@ -59,31 +60,38 @@ it. [`ROADMAP.md`](ROADMAP.md) is where this goes next, and why.
 ## How it compares
 
 Seven browser-side pptx renderers, same 11 fixtures, same machine. Payload is gzipped and
-measured by bundling each engine; `cold` is a first render in a fresh page including
-module and WASM instantiation; `warm` is opening another deck in the same page; `content`
-is the share of *inked* pixels differing from a LibreOffice render of the same slide.
+measured by bundling each engine; `cold` is a first render in a fresh page including module
+and WASM instantiation; `warm` is opening another deck in the same page.
 
-| engine | payload | cold | warm | content |
-|---|---:|---:|---:|---:|
-| **pptx-wasm** (this project) | 319 KB | **29.2 ms** | **2.0 ms** | **20.53%** |
-| [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 94.1 ms | 5.9 ms | 20.42% |
-| [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 102.8 ms | 38.9 ms | 23.05% |
-| [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 38.3 ms | 9.4 ms | 25.39% |
-| [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 93.1 ms | 5.2 ms | 28.59% |
-| [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 20.6 ms | 2.9 ms | 61.33% |
-| [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 223.6 ms | 27.4 ms | 63.17% |
-
-**Of the five engines that render a deck accurately, this is the fastest — on both cold
-and warm.** The one engine that starts faster renders at 61.33%; the one engine that
-matches the fidelity takes 3.2× as long to start and 3.0× as long per slide.
-
-The lead widens on structure, which is what the content figure genuinely discriminates:
-
-| | pptx-wasm | @aiden0z | pptx-preview | pptx-glimpse | vanilla |
+| engine | payload | cold | warm | structure | text |
 |---|---:|---:|---:|---:|---:|
-| tables | **1.65%** | 2.16% | 62.07% | 62.20% | 43.31% |
-| preset shapes | **0.66%** | 1.43% | 4.71% | 5.78% | 72.01% |
-| effects | **0.32%** | 0.47% | 29.22% | 2.71% | 54.97% |
+| **pptx-wasm** (this project) | 319 KB | **31.0 ms** | **2.0 ms** | **1.15%** | 27.43% |
+| [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 98.9 ms | 6.0 ms | 1.37% | 26.93% |
+| [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 103.5 ms | 39.6 ms | 12.37% | 26.72% |
+| [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 38.1 ms | 9.6 ms | 15.12% | 27.08% |
+| [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 95.9 ms | 5.7 ms | 21.54% | 24.44% |
+| [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 20.9 ms | 3.0 ms | 46.58% | 69.15% |
+| [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 225.9 ms | 28.5 ms | 58.61% | 64.72% |
+
+Both fidelity columns are the share of inked pixels differing from a LibreOffice render of
+the same slide, so lower is closer. They are reported separately because they measure
+different things — pooling them buries the informative half:
+
+- **structure** — shapes, tables, effects, fills. This is the column that discriminates:
+  it spreads from 1% to 59%.
+- **text** — paragraphs and titles. Every competent engine lands within three points of
+  the others, because there the diff is dominated by font rasterisation, which a browser
+  and LibreOffice will never agree on. **Read it as a floor, not as a score.**
+
+Fixtures the oracle cannot adjudicate are excluded outright rather than scored:
+`m5b` because chart.xml carries no geometry, so each renderer invents its own axes, and
+`m5f` because LibreOffice ignores `<a:tile>` and stretches the image — scoring it would
+reward engines for repeating the oracle's bug. `suites.json` records both reasons.
+
+**On structure this is the most accurate engine measured**, at 1.15% against 1.37% for the
+next best and 12–59% for the rest. It is also the fastest of the five engines that render
+a deck accurately, on both cold and warm — the one engine that starts faster renders at
+46.58%.
 
 `npm run compare` reproduces all of it; `-- --file=deck.pptx` scores your own deck. The
 same app runs interactively, so differences are visible rather than argued about:
@@ -95,19 +103,21 @@ pptxviewjs mis-draws the hexagon and the plus.*
 
 ### Reading it honestly
 
-Three caveats, because a benchmark published by one of its entrants is worth nothing
-without them:
-
-- **Payload is fourth of seven**, not first. 319 KB is mid-pack; the WASM core buys the
-  speed and the coverage, and costs bytes.
-- **Fidelity is a tie**, not a win — 20.53% against @aiden0z/pptx-renderer's 20.42% is
-  noise, not a lead.
-- **The content figure is a poor guide on text.** Every engine lands at 46–49% on the
-  text-only fixture, because there it measures font rasterisation rather than
-  correctness. And on the tiled-fill fixture the oracle is itself wrong, so engines that
-  stretch the tile score *better* than engines that repeat it correctly. Read the figure
-  on structural fixtures; see [Testing](#testing) for what the oracle can and cannot
-  adjudicate.
+- **Payload is fourth of seven.** 319 KB is mid-pack; the WASM core buys the speed and the
+  coverage, and costs bytes. Reducing it is the top item in [`ROADMAP.md`](ROADMAP.md).
+- **The structural lead over @aiden0z/pptx-renderer is 1.15% against 1.37%** — real, but
+  narrow. That engine is the genuine competition; the rest of the field is not close on
+  this axis.
+- **On text this is the *weakest* of the accurate engines**, at 27.43% against
+  pptx-preview's 24.44%. The band is only three points wide and is mostly rasterisation
+  noise, but the ordering is not flattering and is not being hidden. There is an open
+  question behind it: on the inheritance fixture our text renders about 8% larger in ink
+  extent than LibreOffice's, while our resolved sizes match the slide master exactly.
+  That looks like font substitution rather than a bug, but it has not been confirmed
+  against PowerPoint itself.
+- **LibreOffice is not ground truth.** It is an independent implementation, not
+  PowerPoint. Where the two disagree the number reflects the disagreement, not who is
+  right. See [Testing](#testing).
 
 Two of these packages do not install cleanly: `pptxviewjs` imports `chart.js/auto` and
 `pptx-vanilla-viewer` imports `three`, neither declared as a dependency. Both are

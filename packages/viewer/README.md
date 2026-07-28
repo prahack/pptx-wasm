@@ -30,30 +30,30 @@ React is an optional peer dependency; you only need it for `pptx-wasm/react`.
 
 ## How it compares
 
-Against the other browser-side pptx renderers on npm, over the 11 test fixtures every
-engine renders. Payload is gzipped; `cold` is a first render in a fresh page including
-WASM instantiation; `warm` is opening another deck in the same page; `content` is the
-share of inked pixels differing from a LibreOffice render of the same slide.
+Against the other browser-side pptx renderers on npm, over the same 11 fixtures. Payload
+is gzipped; `cold` is a first render in a fresh page including WASM instantiation; `warm`
+is opening another deck in the same page. The two fidelity columns are the share of inked
+pixels differing from a LibreOffice render — lower is closer.
 
-| engine | payload | cold | warm | content |
-|---|---:|---:|---:|---:|
-| **pptx-wasm** | 319 KB | **29.2 ms** | **2.0 ms** | **20.53%** |
-| @aiden0z/pptx-renderer | 349 KB | 94.1 ms | 5.9 ms | 20.42% |
-| pptxviewjs | 252 KB | 102.8 ms | 38.9 ms | 23.05% |
-| pptx-glimpse | 167 KB | 38.3 ms | 9.4 ms | 25.39% |
-| pptx-preview | 426 KB | 93.1 ms | 5.2 ms | 28.59% |
-| @jvmr/pptx-to-html | 45 KB | 20.6 ms | 2.9 ms | 61.33% |
-| pptx-vanilla-viewer | 1695 KB | 223.6 ms | 27.4 ms | 63.17% |
+| engine | payload | cold | warm | structure | text |
+|---|---:|---:|---:|---:|---:|
+| **pptx-wasm** | 319 KB | **31.0 ms** | **2.0 ms** | **1.15%** | 27.43% |
+| @aiden0z/pptx-renderer | 349 KB | 98.9 ms | 6.0 ms | 1.37% | 26.93% |
+| pptxviewjs | 252 KB | 103.5 ms | 39.6 ms | 12.37% | 26.72% |
+| pptx-glimpse | 167 KB | 38.1 ms | 9.6 ms | 15.12% | 27.08% |
+| pptx-preview | 426 KB | 95.9 ms | 5.7 ms | 21.54% | 24.44% |
+| @jvmr/pptx-to-html | 45 KB | 20.9 ms | 3.0 ms | 46.58% | 69.15% |
+| pptx-vanilla-viewer | 1695 KB | 225.9 ms | 28.5 ms | 58.61% | 64.72% |
 
-Read that honestly: this package is **not the smallest**, and on fidelity it ties with
-@aiden0z/pptx-renderer rather than beating it. What it wins is speed — 3.2× faster cold
-and 3.0× faster warm than that engine — and structural coverage, which is where the
-content figure actually discriminates: on the tables fixture it scores 1.65% against
-62.07% and 62.20% for two of the others.
+**structure** — shapes, tables, effects, fills — is the column that discriminates; it
+spreads from 1% to 59%. **text** is a floor rather than a score: every competent engine
+lands within three points of the others, because there the diff is dominated by font
+rasterisation, which a browser and LibreOffice will never agree on.
 
-The figure is a poor guide on text-only slides, where every engine lands at 46–49%
-because it is measuring font rasterisation rather than correctness. Full method,
-per-fixture numbers and caveats are in the
+Read honestly: this is the most accurate engine measured on structure and the fastest of
+the ones that render accurately, but it is **fourth of seven on payload**, its structural
+lead over @aiden0z/pptx-renderer is narrow, and on text it is the *weakest* of the
+accurate engines. Full method, per-fixture numbers and caveats are in the
 [repository README](https://github.com/prahack/pptx-wasm#how-it-compares).
 
 ## What it renders

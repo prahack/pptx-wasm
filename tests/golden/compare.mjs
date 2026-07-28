@@ -536,25 +536,51 @@ function report(rows, payload, haveOracle) {
       '  on equal terms. The per-fixture table above still stands.');
   } else {
     const mean = (id, key) => common.reduce((a, s) => a + (s[id][key] ?? 0), 0) / common.length;
+
+    // Fidelity is reported split, not pooled. Pooling the two hides the informative half:
+    // on text-dominated fixtures every competent engine lands within about two points of
+    // the rest, because there the diff is measuring font rasterisation rather than
+    // correctness, and averaging that floor into the structural figure drags a 1.4% result
+    // up to 20% and makes a 40x spread look like a rounding error. `scoreAs` in
+    // suites.json says which is which, and why each excluded fixture is excluded.
+    const kindOf = (suiteId) => config.suites.find((x) => x.id === suiteId)?.scoreAs ?? 'structure';
+    const meanOf = (id, kind) => {
+      const v = [...bySuite.entries()]
+        .filter(([sid, row]) => kindOf(sid) === kind && row[id] && row[id].ink != null)
+        .map(([, row]) => row[id].ink);
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    };
     const cols = haveOracle
-      ? [['cold', 'cold', ms], ['warm', 'warm', ms], ['canvas', 'accuracy', pct], ['content', 'ink', pct]]
-      : [['cold', 'cold', ms], ['warm', 'warm', ms]];
+      ? [
+          ['cold', (id) => ms(mean(id, 'cold'))],
+          ['warm', (id) => ms(mean(id, 'warm'))],
+          ['structure', (id) => pct(meanOf(id, 'structure'))],
+          ['text', (id) => pct(meanOf(id, 'text'))],
+        ]
+      : [['cold', (id) => ms(mean(id, 'cold'))], ['warm', (id) => ms(mean(id, 'warm'))]];
     console.log(
       `  ${'engine'.padEnd(30)} ${'payload'.padStart(10)} ` +
-        cols.map(([h]) => h.padStart(9)).join(' '),
+        cols.map(([h]) => h.padStart(10)).join(' '),
     );
     for (const id of ids) {
       console.log(
         `  ${label(id).padEnd(30)} ${kb(payload?.[id]?.total).padStart(10)} ` +
-          cols.map(([, k, f]) => f(mean(id, k)).padStart(9)).join(' '),
+          cols.map(([, f]) => f(id).padStart(10)).join(' '),
       );
     }
     if (haveOracle) {
       console.log(
-        '\n  Lower is closer to LibreOffice. Prefer the content figure: a slide is mostly\n' +
-          '  white, so a badly misplaced text block barely moves the canvas figure.\n' +
-          '  LibreOffice is an imperfect judge (see CLAUDE.md) — but it is the same\n' +
-          '  imperfect judge for every engine, and it is not one that we wrote.',
+        '\n  Both are the share of inked pixels differing from the LibreOffice render, so\n' +
+          '  lower is closer. They are split because they measure different things:\n\n' +
+          '    structure  shapes, tables, effects, fills. This is the one that\n' +
+          '               discriminates — it spreads across a 40x range.\n' +
+          '    text       paragraphs and titles. Every competent engine lands within a\n' +
+          '               couple of points here, because the diff is dominated by font\n' +
+          '               rasterisation, which a browser and LibreOffice will never agree\n' +
+          '               on. Read it as a floor, not as a score.\n\n' +
+          '  Fixtures the oracle cannot adjudicate are excluded entirely; suites.json\n' +
+          '  names them and says why. LibreOffice is an imperfect judge — but it is the\n' +
+          '  same imperfect judge for every engine, and not one that we wrote.',
       );
     }
   }
