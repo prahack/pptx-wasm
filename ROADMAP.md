@@ -31,7 +31,7 @@ we need to close the one capability gap that no amount of speed compensates for.
 
 ## P0 — the gaps that cost us adoption
 
-### 1. Text selection and accessibility
+### 1. Text selection and accessibility — *open*
 
 **The single biggest competitive gap, and it is architectural.** A canvas renders pixels:
 text cannot be selected, copied, found with Ctrl-F, or read by a screen reader. Every
@@ -51,7 +51,7 @@ without a shaper). That is everything needed to lay transparent, correctly-posit
 Impact: removes the one reason to pick a DOM renderer over this. Effort: medium. Risk:
 low — purely additive, cannot regress the raster path.
 
-### 2. The flowchart and action-button presets
+### 2. The flowchart and action-button presets — ~~**done**~~
 
 Found by reading @aiden0z/pptx-renderer — the one engine whose fidelity is close to ours —
 to see what it does differently. It supports **43** `flowChart*` and `actionButton*`
@@ -75,13 +75,22 @@ measured on shapes we chose to implement.**
 
 Two things to do, in order:
 
-1. Add a flowchart fixture to `fixtures/gen.py` and to the golden suite, so the gap is
-   visible in the numbers rather than only in a probe.
-2. Implement the 34 missing presets from the ECMA-376 formulas. They are mostly simple
-   polygons and arcs — far easier than the star and hexagon work already done — and
-   `is_supported()` already exists to assert coverage rather than let it regress silently.
+1. ~~Add a flowchart fixture to `fixtures/gen.py` and to the golden suite.~~ **Done** —
+   `m7a-flowchart.pptx`, 29 shapes, in the suite at 2.16% against a 2.5% tolerance.
+2. ~~Implement the missing presets from the ECMA-376 formulas.~~ **Done** — 22 flowchart
+   presets and all 12 action buttons, the latter as a bevelled plate plus a darkened
+   glyph, reusing the face-shading built for `cube`.
 
-### 2b. Refine five preset curves — *follow-up from 2*
+`m7b` is scored against a reviewed reference rather than the oracle, and the reason is
+itself a finding: **LibreOffice draws action buttons completely flat**, with no bevel,
+while PowerPoint draws them raised and the preset's own `pathLst` carries `lightenLess`
+and `darkenLess` faces to do it. The blank button — no glyph at all — differed 11.4%
+purely because we draw the bevel and the oracle does not. Diffing there would have
+rewarded deleting it. That the bevel is right is an argument from the spec rather than a
+measurement, and it is now one of the specific things the PowerPoint spot-check should
+settle.
+
+### 2b. Refine five preset curves — *open, follow-up from 2*
 
 The 22 new presets landed and `m7a` now diffs 2.16% against the oracle, but that residue
 is not evenly spread. Measured per shape: `multidocument` 18.4%, `document` 14.4%,
@@ -96,7 +105,7 @@ slant were wrong. Adding coverage for a gap found a second gap underneath it.
 Each is a small correction against the reference render, and `m7a`'s tolerance should come
 down to under 1% once they land.
 
-### 3. Payload: 319 KB → target ~220 KB
+### 3. Payload: 319 KB → target ~220 KB — *open*
 
 Fourth of seven is the only axis where we lose to engines that also work. Two facts
 already measured, so the obvious moves are ruled out:
@@ -120,7 +129,7 @@ down. **Measure with `twiggy` before cutting anything** — the 11.5%-of-source 
 proxy for binary size, not a measurement of it, and monomorphised generic code does not
 track line count.
 
-### 4. CI
+### 4. CI — *open*
 
 There is none. The last two sessions found five real bugs — four preset-geometry errors
 and a tiled-fill regression — that the golden suite either hid behind a loose tolerance or

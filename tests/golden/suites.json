@@ -116,6 +116,15 @@
       "scoreAs": "structure",
       "scoreAsReason": "Twenty-nine flowchart presets and no text at all.",
       "reason": "The flowchart family, all 29 of it. This fixture exists because a capability diff against @aiden0z/pptx-renderer found 22 of these falling back to their bounding rectangle, and nothing in the suite noticed — a deck of process diagrams rendered as a grid of blue boxes and every number stayed green. Currently 2.16%, and the budget is deliberately close to it. Measured per shape, what is left is concentrated in five: multidocument 18.4%, document 14.4%, punchedTape 11.1%, terminator 10.8% and inputOutput 9.8%; the other 24 are all under 5.2% and most are pure antialiasing. Three of those five — document, terminator and inputOutput — predate this fixture entirely and are the more interesting finding: they were never covered, so nobody knew their curves and slants were off. Refining all five is tracked in ROADMAP.md; when that lands this number should fall under 1% and the tolerance with it."
+    },
+    {
+      "id": "m7b",
+      "fixture": "m7b-actionbutton.pptx",
+      "maxDiffRatio": 0.005,
+      "scoreAs": "excluded",
+      "scoreAsReason": "LibreOffice draws action buttons flat, so it cannot adjudicate the bevel.",
+      "reason": "The twelve action buttons. NOT compared against the oracle, for the same reason as m5f: LibreOffice renders these as flat rectangles with no bevel at all, while PowerPoint draws them raised and the preset's own pathLst carries lightenLess and darkenLess faces to do it. Diffing against LibreOffice would score the bevel as error and reward removing it — the blank button alone, which has no glyph, differs 11.4% purely because we draw the bevel and it does not. So this compares against a reviewed reference instead, and the tolerance is tight because our own output should be deterministic. The bevel being right is an argument from the spec, not a measurement, and it is one of the things the PowerPoint spot-check in ROADMAP.md should settle.",
+      "oracle": false
     }
   ],
   "_scoreAs": [

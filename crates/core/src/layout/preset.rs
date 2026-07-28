@@ -134,6 +134,64 @@ pub fn faces(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Vec
                 })
                 .collect()
         }
+        // Action buttons: a bevelled plate with a darkened glyph on it. The bevel and the
+        // glyph are separate faces because both are shaded relative to the shape's own
+        // fill — the same mechanism `cube` uses — so a button in any theme colour still
+        // reads as a raised button rather than a flat rectangle with a hole in it.
+        p if p.starts_with("actionButton") => {
+            let ss = w.min(h);
+            let d = ss * 0.06;
+            let mut faces = vec![Face {
+                path: Path::rect(Rect::new(0.0, 0.0, w, h)),
+                fill: PathFillMode::Normal,
+                stroke: true,
+            }];
+            let quad = |a: (f32, f32), b: (f32, f32), c: (f32, f32), e: (f32, f32)| {
+                let mut q = Path::new();
+                q.move_to(a.0, a.1)
+                    .line_to(b.0, b.1)
+                    .line_to(c.0, c.1)
+                    .line_to(e.0, e.1)
+                    .close();
+                q
+            };
+            // Lit from the top-left, as every desktop bevel has been since 1984, and
+            // with the *Less* shades the spec specifies — a highlight, not a slab.
+            // LibreOffice draws these buttons flat, so this suite cannot be scored
+            // against it; see suites.json.
+            for (path, mode) in [
+                (
+                    quad((0.0, 0.0), (w, 0.0), (w - d, d), (d, d)),
+                    PathFillMode::Lighten,
+                ),
+                (
+                    quad((0.0, 0.0), (d, d), (d, h - d), (0.0, h)),
+                    PathFillMode::Lighten,
+                ),
+                (
+                    quad((0.0, h), (d, h - d), (w - d, h - d), (w, h)),
+                    PathFillMode::Darken,
+                ),
+                (
+                    quad((w, 0.0), (w, h), (w - d, h - d), (w - d, d)),
+                    PathFillMode::Darken,
+                ),
+            ] {
+                faces.push(Face {
+                    path,
+                    fill: mode,
+                    stroke: false,
+                });
+            }
+            if let Some(glyph) = action_button_glyph(p, w, h, ss) {
+                faces.push(Face {
+                    path: glyph,
+                    fill: PathFillMode::Darken,
+                    stroke: false,
+                });
+            }
+            faces
+        }
         "cube" => {
             let d = b.cube_d();
             let (x4, y4) = (w - d, h - d);
@@ -180,6 +238,148 @@ pub fn faces(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Vec
             stroke: true,
         }],
     }
+}
+
+/// The symbol on an action button, in the centred square the spec reserves for it.
+///
+/// Coordinates are written in a 0..1 box and mapped once, which keeps each glyph readable
+/// as the picture it is meant to be. `actionButtonBlank` has no glyph and returns `None`.
+fn action_button_glyph(preset: &str, w: f32, h: f32, ss: f32) -> Option<Path> {
+    let side = ss * 0.5;
+    let (ox, oy) = ((w - side) / 2.0, (h - side) / 2.0);
+    let x = |u: f32| ox + u * side;
+    let y = |v: f32| oy + v * side;
+
+    let poly = |pts: &[(f32, f32)]| -> Path {
+        let mut p = Path::new();
+        for (i, &(u, v)) in pts.iter().enumerate() {
+            if i == 0 {
+                p.move_to(x(u), y(v));
+            } else {
+                p.line_to(x(u), y(v));
+            }
+        }
+        p.close();
+        p
+    };
+
+    Some(match preset {
+        "actionButtonBlank" => return None,
+        "actionButtonForwardNext" => poly(&[(0.2, 0.05), (0.85, 0.5), (0.2, 0.95)]),
+        "actionButtonBackPrevious" => poly(&[(0.8, 0.05), (0.15, 0.5), (0.8, 0.95)]),
+        "actionButtonBeginning" => {
+            let bar = poly(&[(0.08, 0.05), (0.24, 0.05), (0.24, 0.95), (0.08, 0.95)]);
+            append(bar, &poly(&[(0.92, 0.05), (0.3, 0.5), (0.92, 0.95)]))
+        }
+        "actionButtonEnd" => {
+            let bar = poly(&[(0.76, 0.05), (0.92, 0.05), (0.92, 0.95), (0.76, 0.95)]);
+            append(bar, &poly(&[(0.08, 0.05), (0.7, 0.5), (0.08, 0.95)]))
+        }
+        "actionButtonDocument" => {
+            // A sheet with its top-right corner turned down.
+            poly(&[
+                (0.22, 0.03),
+                (0.62, 0.03),
+                (0.78, 0.19),
+                (0.78, 0.97),
+                (0.22, 0.97),
+            ])
+        }
+        "actionButtonHome" => {
+            // Wide body, or the roof and a narrow box together just read as an arrow.
+            let roof = poly(&[(0.5, 0.04), (0.98, 0.47), (0.02, 0.47)]);
+            let body = poly(&[(0.16, 0.47), (0.84, 0.47), (0.84, 0.97), (0.16, 0.97)]);
+            // Wound the opposite way, so the non-zero rule cuts it out as the doorway.
+            let door = poly(&[(0.42, 0.97), (0.42, 0.70), (0.58, 0.70), (0.58, 0.97)]);
+            append(append(roof, &body), &door)
+        }
+        "actionButtonSound" => {
+            // A cone speaker and three radiating ticks.
+            let cone = poly(&[
+                (0.05, 0.35),
+                (0.28, 0.35),
+                (0.55, 0.05),
+                (0.55, 0.95),
+                (0.28, 0.65),
+                (0.05, 0.65),
+            ]);
+            // Filled slivers rather than lines: this face is drawn with stroking off,
+            // so a zero-width path would contribute nothing at all.
+            let t = 0.035;
+            let mut ticks = Path::new();
+            for (v0, v1) in [(0.20_f32, 0.06_f32), (0.5, 0.5), (0.80, 0.94)] {
+                let sliver = poly(&[
+                    (0.66, v0 - t),
+                    (0.97, v1 - t),
+                    (0.97, v1 + t),
+                    (0.66, v0 + t),
+                ]);
+                ticks = append(ticks, &sliver);
+            }
+            append(cone, &ticks)
+        }
+        "actionButtonReturn" => {
+            // A U-turn: down the left leg, round the bottom bend, up the right leg and
+            // out into an arrowhead. Traced as one outline — inner edge down, bend,
+            // inner edge up, head, then the outer edge all the way back — so the ribbon
+            // has constant width and no subpath can cancel another.
+            let (cx, cy) = (x(0.45), y(0.62));
+            let (ri, ro) = (0.07 * side, 0.23 * side);
+            let mut p = Path::new();
+            p.move_to(x(0.22), y(0.28));
+            p.line_to(x(0.38), y(0.28));
+            p.line_to(x(0.38), y(0.62));
+            p.arc_to(cx, cy, ri, ri, PI, -PI);
+            p.line_to(x(0.52), y(0.30));
+            p.line_to(x(0.44), y(0.30));
+            p.line_to(x(0.60), y(0.03));
+            p.line_to(x(0.76), y(0.30));
+            p.line_to(x(0.68), y(0.30));
+            p.line_to(x(0.68), y(0.62));
+            p.arc_to(cx, cy, ro, ro, 0.0, PI);
+            p.close();
+            p
+        }
+        "actionButtonInformation" => {
+            // A disc with a lowercase i punched out of it: the counter is a second
+            // subpath, and the non-zero rule cuts it because it winds the other way.
+            let disc = Path::ellipse(Rect::new(x(0.02), y(0.02), side * 0.96, side * 0.96));
+            let stem = poly(&[(0.42, 0.40), (0.58, 0.40), (0.58, 0.82), (0.42, 0.82)]);
+            let dot = poly(&[(0.42, 0.18), (0.58, 0.18), (0.58, 0.32), (0.42, 0.32)]);
+            append(append(disc, &stem), &dot)
+        }
+        "actionButtonHelp" => {
+            // A question mark: hook, stem and point.
+            let mut p = Path::new();
+            p.move_to(x(0.28), y(0.30));
+            p.cubic_to(x(0.28), y(-0.02), x(0.86), y(0.02), x(0.72), y(0.36));
+            p.cubic_to(x(0.66), y(0.50), x(0.55), y(0.52), x(0.55), y(0.68));
+            p.line_to(x(0.42), y(0.68));
+            p.cubic_to(x(0.42), y(0.46), x(0.56), y(0.44), x(0.60), y(0.32));
+            p.cubic_to(x(0.65), y(0.16), x(0.42), y(0.16), x(0.42), y(0.30));
+            p.close();
+            let dot = Path::ellipse(Rect::new(x(0.41), y(0.78), side * 0.16, side * 0.16));
+            append(p, &dot)
+        }
+        "actionButtonMovie" => {
+            // A camera body with a lens barrel and a reel bump.
+            let body = poly(&[
+                (0.05, 0.32),
+                (0.62, 0.32),
+                (0.62, 0.46),
+                (0.80, 0.34),
+                (0.95, 0.34),
+                (0.95, 0.74),
+                (0.80, 0.74),
+                (0.62, 0.62),
+                (0.62, 0.76),
+                (0.05, 0.76),
+            ]);
+            let reel = Path::ellipse(Rect::new(x(0.12), y(0.16), side * 0.22, side * 0.22));
+            append(body, &reel)
+        }
+        _ => return None,
+    })
 }
 
 pub fn build(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Path {
@@ -267,6 +467,17 @@ const SUPPORTED: &[&str] = &[
     "flowChartMagneticDrum",
     "flowChartMagneticTape",
     "flowChartOfflineStorage",
+    "actionButtonHome",
+    "actionButtonHelp",
+    "actionButtonInformation",
+    "actionButtonForwardNext",
+    "actionButtonBackPrevious",
+    "actionButtonBeginning",
+    "actionButtonEnd",
+    "actionButtonReturn",
+    "actionButtonDocument",
+    "actionButtonSound",
+    "actionButtonMovie",
     "pie",
     "chord",
     "arc",
