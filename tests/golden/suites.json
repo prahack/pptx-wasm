@@ -112,10 +112,10 @@
     {
       "id": "m7a",
       "fixture": "m7a-flowchart.pptx",
-      "maxDiffRatio": 0.025,
+      "maxDiffRatio": 0.015,
       "scoreAs": "structure",
       "scoreAsReason": "Twenty-nine flowchart presets and no text at all.",
-      "reason": "The flowchart family, all 29 of it. This fixture exists because a capability diff against @aiden0z/pptx-renderer found 22 of these falling back to their bounding rectangle, and nothing in the suite noticed — a deck of process diagrams rendered as a grid of blue boxes and every number stayed green. Currently 2.16%, and the budget is deliberately close to it. Measured per shape, what is left is concentrated in five: multidocument 18.4%, document 14.4%, punchedTape 11.1%, terminator 10.8% and inputOutput 9.8%; the other 24 are all under 5.2% and most are pure antialiasing. Three of those five — document, terminator and inputOutput — predate this fixture entirely and are the more interesting finding: they were never covered, so nobody knew their curves and slants were off. Refining all five is tracked in ROADMAP.md; when that lands this number should fall under 1% and the tolerance with it."
+      "reason": "The flowchart family, all 29 of it. This fixture exists because a capability diff against @aiden0z/pptx-renderer found 22 of these falling back to their bounding rectangle, and nothing in the suite noticed. Now 1.24%, down from 2.16% after five curves were corrected against sampled reference profiles: terminator was a stadium where the spec gives elliptical caps at 0.161w, inputOutput scaled its slant by the shorter side where the spec says the width, document's bottom wave was symmetric where the real one is not, and punchedTape and multidocument both had the wrong wave. Three of those five — terminator, inputOutput and document — shipped in M1 and were wrong for as long as they had existed; nothing covered them. The budget is close to the figure on purpose: these are flat polygons and arcs with no text, so a move here means a shape changed shape."
     },
     {
       "id": "m7b",

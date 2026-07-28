@@ -90,20 +90,26 @@ rewarded deleting it. That the bevel is right is an argument from the spec rathe
 measurement, and it is now one of the specific things the PowerPoint spot-check should
 settle.
 
-### 2b. Refine five preset curves — *open, follow-up from 2*
+### 2b. Refine five preset curves — ~~**done**~~
 
-The 22 new presets landed and `m7a` now diffs 2.16% against the oracle, but that residue
-is not evenly spread. Measured per shape: `multidocument` 18.4%, `document` 14.4%,
-`punchedTape` 11.1%, `terminator` 10.8%, `inputOutput` 9.8%. The other 24 are all under
-5.2% and mostly pure antialiasing.
+`m7a` went 2.16% → **1.24%**, and the tolerance came down 2.5% → 1.5% with it. Each was
+found by sampling the reference render's edge profile rather than by eye:
 
-The interesting part is that **three of those five — `document`, `terminator` and
-`inputOutput` — predate the flowchart work entirely.** They shipped in the first
-milestone, were never covered by a fixture, and nobody knew their wave, corner radius and
-slant were wrong. Adding coverage for a gap found a second gap underneath it.
+| shape | was | is |
+|---|---|---|
+| `terminator` | a stadium, radius `ss/2` | elliptical caps at `0.161w`, per the spec's pathLst |
+| `inputOutput` | slant scaled by the shorter side | scaled by the width — `parallelogram` uses `ss`, this does not |
+| `document` | a symmetric wave | asymmetric: leaves the right at 0.83h, sags to 0.99h, returns to 0.96h |
+| `punchedTape` | a full sine period | one wave per edge, 0.81h apart |
+| `multidocument` | its own wave and offsets | the document wave, sheets stepped 0.08h |
 
-Each is a small correction against the reference render, and `m7a`'s tolerance should come
-down to under 1% once they land.
+**Three of the five — `terminator`, `inputOutput` and `document` — shipped in M1** and had
+been wrong for as long as they existed. Nothing covered them, so nothing said so.
+
+`Path::bounds()` also became curve-accurate as part of this: it measured the hull of the
+control points, which for a quarter-circle sits about 5% outside the arc, so a shape drawn
+exactly inside its box reported a box 5% too large. That was rejecting correct geometry in
+the coverage test and, less visibly, making the renderer cull less than it could.
 
 ### 3. Payload: 319 KB → target ~220 KB — *open*
 

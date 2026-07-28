@@ -180,6 +180,35 @@ pub enum PathVerb {
     Close,
 }
 
+/// The parameters in (0, 1) at which a cubic reaches a local extreme on one axis.
+fn cubic_extrema(p0: f32, p1: f32, p2: f32, p3: f32) -> impl Iterator<Item = f32> {
+    // B'(t)/3 = t^2 (A - 2B + C) + t (2B - 2A) + A, with A = p1-p0 etc.
+    let (a1, b1, c1) = (p1 - p0, p2 - p1, p3 - p2);
+    let a = a1 - 2.0 * b1 + c1;
+    let b = 2.0 * (b1 - a1);
+    let c = a1;
+    let mut roots = [f32::NAN; 2];
+    if a.abs() < 1e-6 {
+        if b.abs() > 1e-6 {
+            roots[0] = -c / b;
+        }
+    } else {
+        let disc = b * b - 4.0 * a * c;
+        if disc >= 0.0 {
+            let sq = disc.sqrt();
+            roots[0] = (-b + sq) / (2.0 * a);
+            roots[1] = (-b - sq) / (2.0 * a);
+        }
+    }
+    roots.into_iter().filter(|t| *t > 0.0 && *t < 1.0)
+}
+
+/// A cubic evaluated on one axis.
+fn cubic_at(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    let u = 1.0 - t;
+    u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3
+}
+
 /// A path as a verb stream plus a flat point buffer — compact, cheap to clone, and
 /// directly replayable by both Canvas2D and a GPU tessellator.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -288,16 +317,82 @@ impl Path {
 
     /// Control-point bounds. A cheap over-estimate — good enough for culling and for
     /// sizing gradient boxes, never used for hit-testing.
+    /// The tight bounding box of the path.
+    ///
+    /// Curves are measured at their actual extrema rather than by the hull of their
+    /// control points. The hull is easier and always at least as large, but a Bezier
+    /// almost never reaches its control points: a quarter-circle's are about 5% outside
+    /// the arc, so a shape drawn exactly inside its box reports a box 5% too big. That
+    /// matters twice over — it makes the preset coverage test reject correct geometry,
+    /// and it makes the renderer's culling keep work it could have skipped.
     pub fn bounds(&self) -> Rect {
         let Some(first) = self.points.first() else {
             return Rect::default();
         };
-        let (mut minx, mut miny, mut maxx, mut maxy) = (first.x, first.y, first.x, first.y);
-        for p in &self.points {
-            minx = minx.min(p.x);
-            miny = miny.min(p.y);
-            maxx = maxx.max(p.x);
-            maxy = maxy.max(p.y);
+        let (mut minx, mut miny) = (f32::INFINITY, f32::INFINITY);
+        let (mut maxx, mut maxy) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let mut hit = |x: f32, y: f32| {
+            minx = minx.min(x);
+            miny = miny.min(y);
+            maxx = maxx.max(x);
+            maxy = maxy.max(y);
+        };
+
+        let mut i = 0usize;
+        let mut cur = *first;
+        for verb in &self.verbs {
+            match verb {
+                PathVerb::MoveTo | PathVerb::LineTo => {
+                    if let Some(p) = self.points.get(i) {
+                        hit(p.x, p.y);
+                        cur = *p;
+                    }
+                    i += 1;
+                }
+                PathVerb::QuadTo => {
+                    if let (Some(c), Some(p)) = (self.points.get(i), self.points.get(i + 1)) {
+                        hit(p.x, p.y);
+                        // Raise to a cubic and reuse the same extrema search.
+                        let c1 = Point::new(
+                            cur.x + 2.0 / 3.0 * (c.x - cur.x),
+                            cur.y + 2.0 / 3.0 * (c.y - cur.y),
+                        );
+                        let c2 = Point::new(
+                            p.x + 2.0 / 3.0 * (c.x - p.x),
+                            p.y + 2.0 / 3.0 * (c.y - p.y),
+                        );
+                        for t in cubic_extrema(cur.x, c1.x, c2.x, p.x) {
+                            hit(cubic_at(cur.x, c1.x, c2.x, p.x, t), cur.y);
+                        }
+                        for t in cubic_extrema(cur.y, c1.y, c2.y, p.y) {
+                            hit(cur.x, cubic_at(cur.y, c1.y, c2.y, p.y, t));
+                        }
+                        cur = *p;
+                    }
+                    i += 2;
+                }
+                PathVerb::CubicTo => {
+                    if let (Some(c1), Some(c2), Some(p)) = (
+                        self.points.get(i),
+                        self.points.get(i + 1),
+                        self.points.get(i + 2),
+                    ) {
+                        hit(p.x, p.y);
+                        for t in cubic_extrema(cur.x, c1.x, c2.x, p.x) {
+                            hit(cubic_at(cur.x, c1.x, c2.x, p.x, t), cur.y);
+                        }
+                        for t in cubic_extrema(cur.y, c1.y, c2.y, p.y) {
+                            hit(cur.x, cubic_at(cur.y, c1.y, c2.y, p.y, t));
+                        }
+                        cur = *p;
+                    }
+                    i += 3;
+                }
+                PathVerb::Close => {}
+            }
+        }
+        if !minx.is_finite() {
+            return Rect::default();
         }
         Rect::new(minx, miny, maxx - minx, maxy - miny)
     }

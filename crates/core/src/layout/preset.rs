@@ -105,21 +105,24 @@ pub fn faces(preset: &str, w: f32, h: f32, adjustments: &[(String, f64)]) -> Vec
             ]
         }
         "flowChartMultidocument" => {
-            let (ox, oy) = (w * 0.08, h * 0.12);
+            // The reference puts the front sheet's top at 0.16h with three sheets, so the
+            // step is 0.08h; the stack fills the box exactly in both axes.
+            let (ox, oy) = (w * 0.08, h * 0.08);
             let (bw, bh) = (w - ox * 2.0, h - oy * 2.0);
             let doc = |x: f32, y: f32| -> Path {
-                let wave = bh * 0.14;
+                // Same asymmetric wave as `flowChartDocument`: low on the right, sagging
+                // a third of the way across, back up at the left.
                 let mut d = Path::new();
                 d.move_to(x, y)
                     .line_to(x + bw, y)
-                    .line_to(x + bw, y + bh - wave)
+                    .line_to(x + bw, y + bh * 0.83)
                     .cubic_to(
-                        x + bw * 0.75,
+                        x + bw * 0.55,
+                        y + bh * 0.90,
+                        x + bw * 0.10,
                         y + bh,
-                        x + bw * 0.25,
-                        y + bh - wave * 2.0,
                         x,
-                        y + bh - wave,
+                        y + bh * 0.96,
                     );
                 d.close();
                 d
@@ -589,8 +592,19 @@ impl Builder {
                 self.round_rect([r1, r2, r1, r2])
             }
             "flowChartTerminator" => {
-                let r = self.ss() * 0.5;
-                self.round_rect([r, r, r, r])
+                // Elliptical end caps spanning 3475/21600 of the width, per the spec's
+                // pathLst — not a stadium. A stadium uses the shorter side as its radius,
+                // which on a wide terminator makes the caps twice as long as they should
+                // be and eats most of the flat top edge.
+                let rx = w * 0.1609;
+                let mut p = Path::new();
+                p.move_to(rx, 0.0);
+                p.line_to(w - rx, 0.0);
+                p.arc_to(w - rx, h / 2.0, rx, h / 2.0, -PI / 2.0, PI);
+                p.line_to(rx, h);
+                p.arc_to(rx, h / 2.0, rx, h / 2.0, PI / 2.0, PI);
+                p.close();
+                p
             }
             "snip1Rect" => {
                 let c = self.adj.frac("adj", 16667.0) * self.ss();
@@ -641,7 +655,16 @@ impl Builder {
                 } else {
                     0.2
                 };
-                let dx = (a * self.ss()).min(w);
+                // `parallelogram` measures its slant against the shorter side, as its
+                // gdLst does; `flowChartInputOutput` measures it against the width. Using
+                // ss for both leaves the flowchart shape visibly under-slanted whenever
+                // it is wider than it is tall, which is the usual case.
+                let base = if preset == "parallelogram" {
+                    self.ss()
+                } else {
+                    w
+                };
+                let dx = (a * base).min(w);
                 let mut p = Path::new();
                 p.move_to(dx, 0.0)
                     .line_to(w, 0.0)
@@ -906,12 +929,15 @@ impl Builder {
                 p
             }
             "flowChartDocument" => {
-                let wave = h * 0.15;
+                // The bottom edge is not symmetric: sampled off the reference render it
+                // leaves the right edge at 0.83h, sags to about 0.99h a third of the way
+                // across, and comes back to 0.96h at the left. Ending both sides at the
+                // same height — which is what a mirrored wave does — is the wrong shape.
                 let mut p = Path::new();
                 p.move_to(0.0, 0.0)
                     .line_to(w, 0.0)
-                    .line_to(w, h - wave)
-                    .cubic_to(w * 0.75, h, w * 0.25, h - wave * 2.0, 0.0, h - wave)
+                    .line_to(w, h * 0.83)
+                    .cubic_to(w * 0.55, h * 0.90, w * 0.10, h, 0.0, h * 0.96)
                     .close();
                 p
             }
@@ -986,16 +1012,27 @@ impl Builder {
                 p
             }
             "flowChartPunchedTape" => {
-                // A ribbon whose top and bottom edges each make one S-shaped step, low on
-                // the left and high on the right, so the thickness stays constant. Not a
-                // full sine period — two humps looks like a plausible "wavy tape" and is
-                // a completely different shape, worth 44% of the cell against the oracle.
-                let y1 = h / 5.0;
+                // Both edges carry the same wave, 0.86h apart. Sampled off the reference:
+                // the edge leaves the left at 0.09h, sags to 0.18h about a fifth of the
+                // way across, rises to touch 0h around four fifths, and settles at 0.06h.
+                // Two cubics per edge, because one cannot place both a trough and a crest.
                 let mut p = Path::new();
-                p.move_to(0.0, y1);
-                p.cubic_to(w * 0.5, y1, w * 0.5, 0.0, w, 0.0);
-                p.line_to(w, h - y1);
-                p.cubic_to(w * 0.5, h - y1, w * 0.5, h, 0.0, h);
+                // 0.81h, not the 0.86h the reference measures: our trough is a touch
+                // deeper than its, and the pair has to fit inside the box.
+                let d = h * 0.81;
+                p.move_to(0.0, h * 0.09);
+                p.cubic_to(w * 0.12, h * 0.24, w * 0.36, h * 0.17, w * 0.55, h * 0.055);
+                p.cubic_to(w * 0.70, 0.0, w * 0.88, 0.0, w, h * 0.06);
+                p.line_to(w, h * 0.06 + d);
+                p.cubic_to(w * 0.88, d, w * 0.70, d, w * 0.55, h * 0.055 + d);
+                p.cubic_to(
+                    w * 0.36,
+                    h * 0.17 + d,
+                    w * 0.12,
+                    h * 0.24 + d,
+                    0.0,
+                    h * 0.09 + d,
+                );
                 p.close();
                 p
             }
