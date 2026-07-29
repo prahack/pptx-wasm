@@ -472,6 +472,15 @@ fn emit_picture(
     }
 }
 
+// With neither `charts` nor `tables` compiled in, every arm of the match below is cfg'd
+// out and the parameters this function exists to forward become genuinely unused. That is
+// correct rather than an oversight, so it is allowed exactly in that configuration rather
+// than by renaming the parameters — which would make them read as unused in the builds
+// where they are not.
+#[cfg_attr(
+    not(any(feature = "charts", feature = "tables")),
+    allow(unused_variables)
+)]
 fn emit_graphic(
     ctx: &mut Ctx<'_>,
     shape: &Shape,

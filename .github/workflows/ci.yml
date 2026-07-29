@@ -61,10 +61,13 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Install the oracle
+      - name: Install the oracle and the metric-compatible fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libreoffice-impress poppler-utils
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-impress poppler-utils \
+            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation
+          fc-cache -f
 
       - name: Create the fixture venv
         run: |
@@ -122,6 +125,18 @@ jobs:
         run: |
           python3 -m venv .venv
           ./.venv/bin/pip install --quiet python-pptx Pillow
+
+      # The metric-compatible faces `text::fallbacks_for` names — Carlito for Calibri,
+      # Caladea for Cambria, the Liberation family for Arial/Times/Courier. Without them
+      # each browser picks its own substitute, the advances differ, and paragraphs wrap in
+      # different places: the cross-browser check failed on exactly this before they were
+      # installed. Their presence is what makes the fallback chain's promise true.
+      - name: Install the metric-compatible fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation
+          fc-cache -f
 
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit

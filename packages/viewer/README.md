@@ -162,6 +162,7 @@ function Deck() {
 | `fit` | `'contain'` | |
 | `zoom` | `1` | |
 | `keyboard` | `true` | arrows, Page Up/Down, Home/End, space |
+| `selectableText` | `false` | overlay a transparent, selectable copy of the slide's text |
 | `wasm` | bundled | where to load the WASM module from |
 | `loading` | a spinner | node shown while the deck loads |
 | `renderError` | a message | `(error) => ReactNode` |
@@ -173,6 +174,38 @@ function Deck() {
 The component redraws on resize and on device-pixel-ratio changes, prefetches the
 neighbouring slides, and exposes the current slide's text to assistive technology and
 find-in-page.
+
+### Selecting text
+
+A canvas draws pixels, so text on it cannot be selected or copied with the mouse.
+`selectableText` lays a transparent `<span>` per run over the canvas, positioned from the
+same layout that painted the glyphs — the technique pdf.js uses for its text layer.
+
+```tsx
+<PresentationViewer src="/deck.pptx" selectableText />
+```
+
+It is off by default because it costs a DOM node per run, and a dense slide has hundreds.
+**Screen readers and find-in-page do not need it** — the component always renders an
+off-screen copy of the slide text for those. What this adds is selection, which is a
+pointer interaction an off-screen block cannot serve.
+
+Each span is scaled to the width the layout engine measured, so the highlight tracks the
+glyphs instead of drifting across a long line. On the test fixtures that correction is
+within 0.02%.
+
+For the underlying data — say, to build your own overlay, or to hit-test text — use
+`deck.textLayer(index, options)`. Pass the same options you passed to `render`, or the
+boxes will not line up:
+
+```ts
+for (const run of deck.textLayer(0, { width: 960, height: 540, dpr: 1 })) {
+  // run.text, run.x, run.y (baseline), run.width, run.size, run.family, run.rotation
+}
+```
+
+Positions come from the same walk the renderer uses, so a run culled from the canvas is
+absent here too: the layer can never offer selectable text where nothing was painted.
 
 ### Handle
 

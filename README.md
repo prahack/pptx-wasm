@@ -164,6 +164,24 @@ outright, so you can work on the Rust without the whole toolchain installed.
 The browser-driven commands start a dev server if one is not already up, and leave a
 server you started yourself alone.
 
+## Build-time features
+
+The Rust core has two default-on Cargo features, for builds that want a smaller module:
+
+| feature | what dropping it costs | saving (gzipped) |
+|---|---|---|
+| `charts` | chart parsing, layout and rendering | 27.1 KB |
+| `tables` | table layout and the built-in style catalogue | 19.2 KB |
+
+```sh
+wasm-pack build crates/wasm --target web --no-default-features --features panic-hook
+```
+
+317.2 KB full, 270.0 KB with neither. A build without a feature still parses a deck that
+uses it and renders everything else on the slide; only that shape's frame is left empty.
+The model and the parser for tables stay either way — they are small, and a shape has to
+be understood in order to be skipped.
+
 ## Testing
 
 Three layers, each answering a different question.

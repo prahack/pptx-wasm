@@ -193,10 +193,28 @@ a missing face keeps its wrap points rather than reflowing the slide.
 ### What the evidence says so far
 
 `npm run test:browsers` renders every fixture in Chromium, Firefox and WebKit and compares
-them. On the current suite — including the deliberately wrap-heavy `m2` — the extracted
-text is **identical in all three**, and the proportion of non-background pixels agrees to
-within 0.2%. So the theoretical divergence has not produced a single differing wrap point
-yet. That is the check to run before reopening this decision.
+them. On macOS, on the whole suite — including the deliberately wrap-heavy `m2` — the
+extracted text is **identical in all three**, and the proportion of non-background pixels
+agrees to within 0.2%.
+
+**On a bare Linux CI runner it was not.** `m2`, `m5a` and `m5d` each came back with two
+variants of the extracted text, which is `DisplayList::plain_text()` and therefore carries
+the line breaks layout chose. So the theoretical divergence is real, and it took an
+environment with a different font set to produce it.
+
+The cause is the one the fallback chain was built for, and the fix confirms the design
+rather than working around it. `text::fallbacks_for` names metric-compatible substitutes —
+Carlito for Calibri, Caladea for Cambria, the Liberation family for Arial, Times and
+Courier — precisely so a missing face keeps its wrap points. None of them are installed on
+a stock `ubuntu-latest` image, so each engine fell through to a different default and
+measured different advances. Installing them makes all three agree again; CI now does.
+
+The lesson is narrower than "the decision was wrong", and worth keeping straight: wrap
+points are stable across browsers **when the faces the chain names are present**. Where
+they are not — an unusual Linux desktop, a locked-down container — a deck can break
+differently between engines. That is the cost of measuring through the browser, it is now
+demonstrated rather than hypothesised, and it is bounded by shipping or requiring those
+faces.
 
 ### When to revisit
 
