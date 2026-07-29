@@ -119,7 +119,19 @@ async function main() {
         const width = suite.width ?? config.defaults.width;
         const height = suite.height ?? config.defaults.height;
         try {
-          const out = await renderIn(browser, suite.fixture, 0, width, height);
+          // One retry, and only for a browser that fell over rather than for a result
+          // we dislike. WebKit dies with "Target page, context or browser has been
+          // closed" occasionally on CI; treating that as a rendering failure reports a
+          // bug in this project that does not exist. A second crash is reported.
+          let out;
+          try {
+            out = await renderIn(browser, suite.fixture, 0, width, height);
+          } catch (e) {
+            const crashed = /closed|crash|Target page|browser has been/i.test(String(e.message));
+            if (!crashed) throw e;
+            console.log(`\n    ${label} crashed on ${suite.id}; retrying once`);
+            out = await renderIn(browser, suite.fixture, 0, width, height);
+          }
           results.push({
             engine: id,
             label,
@@ -186,27 +198,31 @@ async function main() {
         `extracted text differs between engines: ` +
           groups.map(([, engines]) => engines.join('+')).join(' vs '),
       );
-      // Compare the two largest groups word by word and quote the first disagreement
-      // with a little context on each side.
+      // Compare raw, with whitespace visible. Splitting on /\s+/ first was wrong in the
+      // one case that matters: a wrap point moving changes a space into a newline and
+      // nothing else, so the word arrays come out identical and the report said "same
+      // words, different length: 74 and 74". Where the break sits is the entire finding.
       groups.sort((a, b) => b[1].length - a[1].length);
       const [aText, aEngines] = groups[0];
       const [bText, bEngines] = groups[1];
-      const aw = aText.split(/\s+/);
-      const bw = bText.split(/\s+/);
-      const at = Math.min(aw.length, bw.length);
       let i = 0;
-      while (i < at && aw[i] === bw[i]) i += 1;
-      const ctx = (w, n) => w.slice(Math.max(0, n - 3), n + 4).join(' ');
-      if (i < at) {
-        problems.push(`  first difference at word ${i + 1}:`);
-        problems.push(`    ${aEngines.join('+')}: …${ctx(aw, i)}…`);
-        problems.push(`    ${bEngines.join('+')}: …${ctx(bw, i)}…`);
-      } else {
-        problems.push(
-          `  same words, different length: ${aEngines.join('+')} has ${aw.length}, ` +
-            `${bEngines.join('+')} has ${bw.length}`,
-        );
-      }
+      while (i < aText.length && i < bText.length && aText[i] === bText[i]) i += 1;
+      const show = (t) =>
+        t
+          .slice(Math.max(0, i - 30), i + 30)
+          .replace(/\n/g, '⏎')
+          .replace(/\t/g, '⇥');
+      problems.push(`  first difference at character ${i}:`);
+      problems.push(`    ${aEngines.join('+')}: …${show(aText)}…`);
+      problems.push(`    ${bEngines.join('+')}: …${show(bText)}…`);
+      // Whether only the whitespace moved is the difference between "a line broke
+      // elsewhere" and "the text itself is not the same", and they need different fixes.
+      const sameWords = aText.split(/\s+/).join(' ') === bText.split(/\s+/).join(' ');
+      problems.push(
+        sameWords
+          ? '    (identical words — a line break moved, not the text)'
+          : '    (the words themselves differ)',
+      );
       failed = true;
     }
 
