@@ -83,7 +83,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libreoffice-impress poppler-utils \
-            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation
+            fonts-croscore fonts-crosextra-carlito fonts-crosextra-caladea \
+            fonts-liberation fonts-gelasio
           fc-cache -f
 
       - name: Create the fixture venv
@@ -143,16 +144,21 @@ jobs:
           python3 -m venv .venv
           ./.venv/bin/pip install --quiet python-pptx Pillow
 
-      # The metric-compatible faces `text::fallbacks_for` names — Carlito for Calibri,
-      # Caladea for Cambria, the Liberation family for Arial/Times/Courier. Without them
-      # each browser picks its own substitute, the advances differ, and paragraphs wrap in
-      # different places: the cross-browser check failed on exactly this before they were
-      # installed. Their presence is what makes the fallback chain's promise true.
+      # Every metric-compatible face `text::fallbacks_for` names, and nothing else:
+      # Carlito, Caladea, Gelasio, the Liberation family, and croscore for Arimo, Tinos
+      # and Cousine. The list is derived from that function — if a twin is added there
+      # without being added here, the chain names a face the runner does not have and the
+      # promise it makes stops being true.
+      #
+      # Which is not hypothetical. Installing only Carlito, Caladea and Liberation fixed
+      # two of the three failing fixtures; m2 kept wrapping differently because it asks
+      # for Georgia on purpose, whose twin is Gelasio, which was not in the list.
       - name: Install the metric-compatible fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation
+            fonts-croscore fonts-crosextra-carlito fonts-crosextra-caladea \
+            fonts-liberation fonts-gelasio
           fc-cache -f
 
       - run: npm ci
