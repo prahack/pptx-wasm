@@ -52,7 +52,7 @@ import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
 import { findTools, renderFixture } from './oracle.mjs';
-import { ROOT } from './server.mjs';
+import { killTree, ROOT } from './server.mjs';
 
 const exec = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -232,19 +232,22 @@ async function ensureComparisonServer() {
     process.exit(2);
   }
   const { spawn } = await import('node:child_process');
+  // Detached for the same reason as the dev server in server.mjs: killing the wrapper
+  // leaves vite's own children holding the port and the runner open.
   const child = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: APP,
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
   });
   let stderr = '';
   child.stderr.on('data', (d) => (stderr += String(d)));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    if (await isUp()) return { stop: () => child.kill() };
+    if (await isUp()) return { stop: () => killTree(child) };
     if (child.exitCode !== null) throw new Error(`comparison server exited:\n${stderr}`);
     await sleep(250);
   }
-  child.kill();
+  killTree(child);
   throw new Error(`comparison server did not start on ${BASE}:\n${stderr}`);
 }
 

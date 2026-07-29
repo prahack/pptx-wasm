@@ -25,6 +25,33 @@ export const BASE = `http://localhost:${PORT}`;
  */
 const MARKER = '<title>pptx-wasm dev</title>';
 
+/**
+ * Signals a spawned server and everything it started.
+ *
+ * Negating the pid addresses the process group, which is why the server is spawned
+ * detached. SIGKILL follows SIGTERM after a moment because vite occasionally declines to
+ * take the hint, and a test run must not depend on its manners.
+ */
+export function killTree(child) {
+  if (!child?.pid) return;
+  const signal = (sig) => {
+    try {
+      process.kill(-child.pid, sig);
+    } catch {
+      // Already gone, or never became a group leader; the direct kill is the fallback.
+      try {
+        child.kill(sig);
+      } catch {
+        /* nothing left to signal */
+      }
+    }
+  };
+  signal('SIGTERM');
+  const hard = setTimeout(() => signal('SIGKILL'), 3000);
+  // Do not let the timer itself hold the event loop open — that would be the same bug.
+  hard.unref?.();
+}
+
 export async function isUp() {
   try {
     const res = await fetch(BASE, { signal: AbortSignal.timeout(1500) });
@@ -51,10 +78,17 @@ export async function ensureServer({ quiet = false } = {}) {
   }
 
   if (!quiet) console.log('Starting the dev server…');
+  // `detached` puts the server in its own process group so the whole tree can be
+  // signalled at once. Without it `child.kill()` reaches only the `npm` wrapper: npm
+  // spawns vite, vite spawns esbuild, and those two outlive it holding the port open.
+  // Locally that goes unnoticed because the shell lives on anyway. On a CI runner the
+  // step never exits — the golden suite reported 20/20 and then sat there for six hours
+  // until the job was cancelled.
   const child = spawn('npm', ['run', 'dev', '--workspace', 'packages/viewer'], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, BROWSER: 'none' },
+    detached: true,
   });
   let stderr = '';
   child.stderr.on('data', (d) => {
@@ -64,7 +98,7 @@ export async function ensureServer({ quiet = false } = {}) {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     if (await isUp()) {
-      return { stop: () => child.kill(), started: true };
+      return { stop: () => killTree(child), started: true };
     }
     if (child.exitCode !== null) {
       throw new Error(
@@ -73,6 +107,6 @@ export async function ensureServer({ quiet = false } = {}) {
     }
     await sleep(250);
   }
-  child.kill();
+  killTree(child);
   throw new Error(`the dev server did not come up on ${BASE} within 90s:\n${stderr}`);
 }
