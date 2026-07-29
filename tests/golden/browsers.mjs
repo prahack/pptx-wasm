@@ -168,10 +168,45 @@ async function main() {
 
     // Text must match across engines: it comes from layout, which must not depend on the
     // browser beyond metrics.
-    const texts = forSuite.filter((r) => !r.error).map((r) => r.text ?? '');
-    const distinct = new Set(texts);
-    if (distinct.size > 1) {
-      problems.push(`extracted text differs between engines (${distinct.size} variants)`);
+    //
+    // When it does not match, say exactly how. "2 variants" tells you a wrap point moved
+    // and nothing else; on a CI runner you cannot attach a debugger, and the log is all
+    // you get. Naming the engines and quoting the first divergence turns a red build into
+    // a diagnosis.
+    const ok = forSuite.filter((r) => !r.error);
+    const byText = new Map();
+    for (const r of ok) {
+      const key = r.text ?? '';
+      if (!byText.has(key)) byText.set(key, []);
+      byText.get(key).push(r.engine);
+    }
+    if (byText.size > 1) {
+      const groups = [...byText.entries()];
+      problems.push(
+        `extracted text differs between engines: ` +
+          groups.map(([, engines]) => engines.join('+')).join(' vs '),
+      );
+      // Compare the two largest groups word by word and quote the first disagreement
+      // with a little context on each side.
+      groups.sort((a, b) => b[1].length - a[1].length);
+      const [aText, aEngines] = groups[0];
+      const [bText, bEngines] = groups[1];
+      const aw = aText.split(/\s+/);
+      const bw = bText.split(/\s+/);
+      const at = Math.min(aw.length, bw.length);
+      let i = 0;
+      while (i < at && aw[i] === bw[i]) i += 1;
+      const ctx = (w, n) => w.slice(Math.max(0, n - 3), n + 4).join(' ');
+      if (i < at) {
+        problems.push(`  first difference at word ${i + 1}:`);
+        problems.push(`    ${aEngines.join('+')}: …${ctx(aw, i)}…`);
+        problems.push(`    ${bEngines.join('+')}: …${ctx(bw, i)}…`);
+      } else {
+        problems.push(
+          `  same words, different length: ${aEngines.join('+')} has ${aw.length}, ` +
+            `${bEngines.join('+')} has ${bw.length}`,
+        );
+      }
       failed = true;
     }
 
