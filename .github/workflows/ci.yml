@@ -34,6 +34,23 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo clippy -p pptx-renderer --target wasm32-unknown-unknown -- -D warnings
 
+      # `--workspace` unifies features and so never builds the core with none of them
+      # enabled. That configuration is reachable in practice — pptx-renderer depends on
+      # core with default-features off — and it broke here once, with parameters that
+      # every cfg'd-out match arm would have used. Checking the corners costs seconds.
+      - name: Feature matrix
+        run: |
+          set -e
+          for features in "--no-default-features" \
+                          "--no-default-features --features charts" \
+                          "--no-default-features --features tables" \
+                          "--all-features"; do
+            echo "::group::pptx-core $features"
+            cargo clippy -p pptx-core $features --all-targets -- -D warnings
+            cargo test -p pptx-core $features
+            echo "::endgroup::"
+          done
+
   # The pixel suite. Slower and needs LibreOffice, poppler, a Python venv and a browser,
   # which is why it is a separate job rather than bolted onto the one above — a Rust
   # failure should not wait on an apt install.
