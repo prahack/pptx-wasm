@@ -59,39 +59,34 @@ it. [`ROADMAP.md`](ROADMAP.md) is where this goes next, and why.
 
 ## How it compares
 
-Seven browser-side pptx renderers, same 11 fixtures, same machine. Payload is gzipped and
+Seven browser-side pptx renderers, same 14 fixtures, same machine. Payload is gzipped and
 measured by bundling each engine; `cold` is a first render in a fresh page including module
 and WASM instantiation; `warm` is opening another deck in the same page.
 
 | engine | payload | cold | warm | structure | text |
 |---|---:|---:|---:|---:|---:|
-| **pptx-wasm** (this project) | 319 KB | **31.0 ms** | **2.0 ms** | **1.15%** | 27.43% |
-| [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 98.9 ms | 6.0 ms | 1.37% | 26.93% |
-| [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 103.5 ms | 39.6 ms | 12.37% | 26.72% |
-| [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 38.1 ms | 9.6 ms | 15.12% | 27.08% |
-| [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 95.9 ms | 5.7 ms | 21.54% | 24.44% |
-| [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 20.9 ms | 3.0 ms | 46.58% | 69.15% |
-| [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 225.9 ms | 28.5 ms | 58.61% | 64.72% |
+| **pptx-wasm** (this project) | 328 KB | **36.2 ms** | **3.0 ms** | **1.23%** | 27.43% |
+| [@aiden0z/pptx-renderer](https://www.npmjs.com/package/@aiden0z/pptx-renderer) 1.2.4 | 349 KB | 102.1 ms | 6.2 ms | 1.54% | 26.93% |
+| [pptxviewjs](https://www.npmjs.com/package/pptxviewjs) 1.1.9 | 252 KB | 99.6 ms | 33.0 ms | 14.57% | 26.72% |
+| [pptx-glimpse](https://www.npmjs.com/package/pptx-glimpse) 5.0.0 | 167 KB | 40.5 ms | 9.9 ms | 14.84% | 27.08% |
+| [pptx-preview](https://www.npmjs.com/package/pptx-preview) 1.0.7 | 426 KB | 99.4 ms | 5.8 ms | 33.19% | 24.44% |
+| [@jvmr/pptx-to-html](https://www.npmjs.com/package/@jvmr/pptx-to-html) 1.1.1 | 45 KB | 21.2 ms | 2.9 ms | 47.76% | 69.15% |
+| [pptx-vanilla-viewer](https://www.npmjs.com/package/pptx-vanilla-viewer) 1.6.2 | 1695 KB | 228.5 ms | 28.4 ms | 57.38% | 64.72% |
 
 Both fidelity columns are the share of inked pixels differing from a LibreOffice render of
 the same slide, so lower is closer. They are reported separately because they measure
 different things — pooling them buries the informative half:
 
 - **structure** — shapes, tables, effects, fills. This is the column that discriminates:
-  it spreads from 1% to 59%.
+  it spreads from 1% to 57%.
 - **text** — paragraphs and titles. Every competent engine lands within three points of
   the others, because there the diff is dominated by font rasterisation, which a browser
   and LibreOffice will never agree on. **Read it as a floor, not as a score.**
 
-Fixtures the oracle cannot adjudicate are excluded outright rather than scored:
-`m5b` because chart.xml carries no geometry, so each renderer invents its own axes, and
-`m5f` because LibreOffice ignores `<a:tile>` and stretches the image — scoring it would
-reward engines for repeating the oracle's bug. `suites.json` records both reasons.
-
-**On structure this is the most accurate engine measured**, at 1.15% against 1.37% for the
-next best and 12–59% for the rest. It is also the fastest of the five engines that render
-a deck accurately, on both cold and warm — the one engine that starts faster renders at
-46.58%.
+Fixtures the oracle cannot adjudicate are excluded outright rather than scored: charts
+(it invents its own axes), tiled fills (it ignores `<a:tile>`), action buttons (it draws
+them flat) and soft edges (it erodes the silhouette where we feather inward).
+`suites.json` records each reason.
 
 `npm run compare` reproduces all of it; `-- --file=deck.pptx` scores your own deck. The
 same app runs interactively, so differences are visible rather than argued about:
@@ -101,23 +96,44 @@ same app runs interactively, so differences are visible rather than argued about
 *The same deck in four engines. pptx-preview drops the five-pointed star entirely;
 pptxviewjs mis-draws the hexagon and the plus.*
 
+### One of these fixtures is ours, and it matters
+
+`m7a` covers the 29 `flowChart*` presets. It exists because a capability diff against
+@aiden0z/pptx-renderer found that **22 of them fell back to a plain rectangle here** while
+that engine drew them all — so the fixture was written to expose a gap in *this* project,
+and then the gap was closed. It is a fair test of a feature real decks lean on heavily.
+
+It is also a fixture added by one entrant, and it moves the table. Both figures:
+
+| engine | structure, with `m7a` | without |
+|---|---:|---:|
+| **pptx-wasm** | **1.23%** | **1.15%** |
+| @aiden0z | 1.54% | 1.37% |
+| pptxviewjs | 14.57% | 12.37% |
+| pptx-glimpse | 14.84% | 15.12% |
+| pptx-preview | **33.19%** | 21.54% |
+| @jvmr | 47.76% | 46.58% |
+| pptx-vanilla-viewer | 57.38% | 58.61% |
+
+pptx-preview scores 91.41% on `m7a` alone, which is most of its eleven-point move. The
+ordering is unchanged either way, but a reader deciding on that column deserves to know
+which number a fixture written here is carrying.
+
 ### Reading it honestly
 
-- **Payload is fourth of seven.** 319 KB is mid-pack; the WASM core buys the speed and the
-  coverage, and costs bytes. Reducing it is the top item in [`ROADMAP.md`](ROADMAP.md).
-- **The structural lead over @aiden0z/pptx-renderer is 1.15% against 1.37%** — real, but
+- **Payload is fourth of seven.** 328 KB is mid-pack, and it grew from 319 KB this
+  release: soft edges, the text layer and 34 new presets all cost bytes. Building without
+  the `charts` and `tables` features takes it to 281 KB — see
+  [Build-time features](#build-time-features).
+- **The structural lead over @aiden0z/pptx-renderer is 1.23% against 1.54%** — real, but
   narrow. That engine is the genuine competition; the rest of the field is not close on
   this axis.
 - **On text this is the *weakest* of the accurate engines**, at 27.43% against
   pptx-preview's 24.44%. The band is only three points wide and is mostly rasterisation
-  noise, but the ordering is not flattering and is not being hidden. There is an open
-  question behind it: on the inheritance fixture our text renders about 8% larger in ink
-  extent than LibreOffice's, while our resolved sizes match the slide master exactly.
-  That looks like font substitution rather than a bug, but it has not been confirmed
-  against PowerPoint itself.
+  noise, but the ordering is not flattering and is not being hidden.
 - **LibreOffice is not ground truth.** It is an independent implementation, not
-  PowerPoint. Where the two disagree the number reflects the disagreement, not who is
-  right. See [Testing](#testing).
+  PowerPoint. Four fixtures are excluded precisely because it and this renderer disagree
+  and neither can be shown right without PowerPoint. See [Testing](#testing).
 
 Two of these packages do not install cleanly: `pptxviewjs` imports `chart.js/auto` and
 `pptx-vanilla-viewer` imports `three`, neither declared as a dependency. Both are
@@ -170,14 +186,14 @@ The Rust core has two default-on Cargo features, for builds that want a smaller 
 
 | feature | what dropping it costs | saving (gzipped) |
 |---|---|---|
-| `charts` | chart parsing, layout and rendering | 27.1 KB |
-| `tables` | table layout and the built-in style catalogue | 19.2 KB |
+| `charts` | chart parsing, layout and rendering | 27 KB |
+| `tables` | table layout and the built-in style catalogue | 19 KB |
 
 ```sh
 wasm-pack build crates/wasm --target web --no-default-features --features panic-hook
 ```
 
-317.2 KB full, 270.0 KB with neither. A build without a feature still parses a deck that
+The module is 319.6 KB gzipped with both, 272.9 KB with neither. A build without a feature still parses a deck that
 uses it and renders everything else on the slide; only that shape's frame is left empty.
 The model and the parser for tables stay either way — they are small, and a shape has to
 be understood in order to be skipped.

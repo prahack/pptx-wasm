@@ -30,46 +30,48 @@ React is an optional peer dependency; you only need it for `pptx-wasm/react`.
 
 ## How it compares
 
-Against the other browser-side pptx renderers on npm, over the same 11 fixtures. Payload
+Against the other browser-side pptx renderers on npm, over the same 14 fixtures. Payload
 is gzipped; `cold` is a first render in a fresh page including WASM instantiation; `warm`
 is opening another deck in the same page. The two fidelity columns are the share of inked
 pixels differing from a LibreOffice render — lower is closer.
 
 | engine | payload | cold | warm | structure | text |
 |---|---:|---:|---:|---:|---:|
-| **pptx-wasm** | 319 KB | **31.0 ms** | **2.0 ms** | **1.15%** | 27.43% |
-| @aiden0z/pptx-renderer | 349 KB | 98.9 ms | 6.0 ms | 1.37% | 26.93% |
-| pptxviewjs | 252 KB | 103.5 ms | 39.6 ms | 12.37% | 26.72% |
-| pptx-glimpse | 167 KB | 38.1 ms | 9.6 ms | 15.12% | 27.08% |
-| pptx-preview | 426 KB | 95.9 ms | 5.7 ms | 21.54% | 24.44% |
-| @jvmr/pptx-to-html | 45 KB | 20.9 ms | 3.0 ms | 46.58% | 69.15% |
-| pptx-vanilla-viewer | 1695 KB | 225.9 ms | 28.5 ms | 58.61% | 64.72% |
+| **pptx-wasm** | 328 KB | **36.2 ms** | **3.0 ms** | **1.23%** | 27.43% |
+| @aiden0z/pptx-renderer | 349 KB | 102.1 ms | 6.2 ms | 1.54% | 26.93% |
+| pptxviewjs | 252 KB | 99.6 ms | 33.0 ms | 14.57% | 26.72% |
+| pptx-glimpse | 167 KB | 40.5 ms | 9.9 ms | 14.84% | 27.08% |
+| pptx-preview | 426 KB | 99.4 ms | 5.8 ms | 33.19% | 24.44% |
+| @jvmr/pptx-to-html | 45 KB | 21.2 ms | 2.9 ms | 47.76% | 69.15% |
+| pptx-vanilla-viewer | 1695 KB | 228.5 ms | 28.4 ms | 57.38% | 64.72% |
 
-**structure** — shapes, tables, effects, fills — is the column that discriminates; it
-spreads from 1% to 59%. **text** is a floor rather than a score: every competent engine
-lands within three points of the others, because there the diff is dominated by font
-rasterisation, which a browser and LibreOffice will never agree on.
+**structure** — shapes, tables, effects, fills — is the column that discriminates. **text**
+is a floor rather than a score: every competent engine lands within three points of the
+others, because there the diff is dominated by font rasterisation, which a browser and
+LibreOffice will never agree on.
 
-Read honestly: this is the most accurate engine measured on structure and the fastest of
-the ones that render accurately, but it is **fourth of seven on payload**, its structural
-lead over @aiden0z/pptx-renderer is narrow, and on text it is the *weakest* of the
-accurate engines. Full method, per-fixture numbers and caveats are in the
-[repository README](https://github.com/prahack/pptx-wasm#how-it-compares).
+Read honestly: the fastest of the engines that render accurately and the most accurate on
+structure, but **fourth of seven on payload**, a narrow lead over @aiden0z/pptx-renderer,
+and the *weakest* of the accurate engines on text. One of the fixtures was written for
+this project after a capability diff found 22 flowchart presets missing here; it moves
+other engines' figures and the
+[repository README](https://github.com/prahack/pptx-wasm#one-of-these-fixtures-is-ours-and-it-matters)
+gives the table both with and without it.
 
 ## What it renders
 
 | | |
 |---|---|
 | **Text** | paragraphs, runs, alignment, word wrap, line and paragraph spacing, bold/italic/underline/strikethrough, bullets and auto-numbering, vertical anchoring, autofit, embedded fonts |
-| **Shapes** | ~70 preset geometries, custom geometry (including the DrawingML formula language), connectors, nested groups with rotation and flips |
+| **Shapes** | ~110 preset geometries including the full flowchart and action-button families, custom geometry (including the DrawingML formula language), connectors, nested groups with rotation and flips |
 | **Fills** | solid, linear and radial gradients (including on text), picture fills stretched or tiled, preset hatch patterns, transparency |
 | **Images** | PNG, JPEG, GIF, BMP, WebP, SVG, with `srcRect` cropping and shape-clipping |
 | **Inheritance** | the full chain: shape → placeholder → layout → master → theme, with colour maps and theme fonts |
 | **Tables** | grids, merged cells, borders, and PowerPoint's built-in table styles |
 | **Charts** | bar, column, line, area, pie, doughnut and scatter, with axes, gridlines and legends |
-| **Effects** | drop shadows and glow |
+| **Effects** | drop shadows, glow and soft edges |
 
-Known gaps: soft edges, 3-D bevels, SmartArt and OLE embeddings (these render as their
+Known gaps: 3-D bevels, SmartArt and OLE embeddings (these render as their
 fallback image where the file provides one), animations and transitions, and EMF/WMF
 images — which no browser can decode.
 

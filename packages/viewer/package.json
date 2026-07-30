@@ -1,6 +1,6 @@
 {
   "name": "pptx-wasm",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Browser-native, read-only .pptx renderer. Rust/WASM core, canvas output, no server-side conversion and nothing uploaded.",
   "keywords": [
     "pptx",
