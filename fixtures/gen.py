@@ -763,6 +763,66 @@ def gen_m7() -> None:
     save(deck, "m7b-actionbutton")
 
 
+# --------------------------------------------------------------------------- m8
+
+def gen_m8() -> None:
+    """Soft edges, at three radii, over a background that shows the fade.
+
+    A soft edge fades the shape's own alpha inward from its outline. Drawn on white it is
+    nearly invisible — the fade is to transparent, and transparent over white looks like
+    white — so the slide is dark and the shapes are light. Whether the effect is present
+    at all is the thing this fixture has to make obvious.
+
+    The last shape carries a soft edge *and* a shadow, which is the case that gets
+    implemented wrongly: feather the two together and the shadow disappears into the same
+    fade, leaving something that reads as an unusually faint shape rather than a soft one.
+    """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+
+    deck = new_deck()
+    slide = blank(deck)
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = RGBColor(0x1B, 0x2A, 0x3A)
+
+    def shape_at(x_in: float, radius_emu: int, shadow: bool) -> None:
+        box = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, Inches(x_in), Inches(1.6), Inches(2.6), Inches(2.6)
+        )
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor(0xE8, 0xC4, 0x6A)
+        box.line.fill.background()
+        sp_pr = box._element.spPr
+        fx = etree.SubElement(sp_pr, qn("a:effectLst"))
+        if shadow:
+            shdw = etree.SubElement(fx, qn("a:outerShdw"))
+            shdw.set("blurRad", "76200")
+            shdw.set("dist", "114300")
+            shdw.set("dir", "2700000")
+            c = etree.SubElement(shdw, qn("a:srgbClr"))
+            c.set("val", "000000")
+            etree.SubElement(c, qn("a:alpha")).set("val", "70000")
+        soft = etree.SubElement(fx, qn("a:softEdge"))
+        soft.set("rad", str(radius_emu))
+
+    # 0pt (a control that must stay hard-edged), 6pt, 18pt, then 6pt with a shadow.
+    #
+    # The shadowed one uses the *small* radius on purpose. A soft edge fades alpha to zero
+    # at the outline, and a shadow is cast from that alpha, so pairing an 18pt fade with a
+    # short throw hides the shadow underneath the shape entirely — correct, and useless as
+    # a picture of the interaction. At 6pt the fade and the shadow are both visible.
+    for i, (radius_pt, shadow) in enumerate([(0, False), (6, False), (18, False), (6, True)]):
+        shape_at(0.5 + i * 3.2, int(radius_pt * 12700), shadow)
+
+    label = slide.shapes.add_textbox(Inches(0.5), Inches(4.7), Inches(12.3), Inches(0.8))
+    run = label.text_frame.paragraphs[0].add_run()
+    run.text = "soft edge: none, 6pt, 18pt, 6pt + shadow"
+    run.font.size = Pt(20)
+    run.font.color.rgb = RGBColor(0xE8, 0xE8, 0xE8)
+
+    save(deck, "m8-softedge")
+
+
 # --------------------------------------------------------------------------- m6
 
 def gen_m6() -> None:
@@ -852,6 +912,7 @@ GENERATORS = {
     "m5e": gen_m5e,
     "m5f": gen_m5f,
     "m7": gen_m7,
+    "m8": gen_m8,
     "m6": gen_m6,
     "bench": gen_bench,
 }

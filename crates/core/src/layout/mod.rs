@@ -315,6 +315,16 @@ fn emit_geometry(
         dl.push(Command::SetShadow(shadow));
     }
 
+    // A soft edge wraps the fill and the outline together, because the fade runs over the
+    // silhouette of the whole shape rather than over each drawing operation. It is opened
+    // inside any shadow group on purpose: the shadow is cast by the shape, so feathering
+    // it as well would fade the shadow into nothing at exactly the radius the shape is
+    // fading over, and the effect would read as a shape that is simply too faint.
+    let soft_edge = effects.soft_edge.map(emu::to_pt).filter(|r| *r > 0.0);
+    if let Some(radius) = soft_edge {
+        dl.push(Command::BeginSoftEdge(radius));
+    }
+
     // Geometry is generated at the origin; move it to the shape's position.
     let offset = Transform::translate(box_rect.x, box_rect.y);
     let fill_paint = paint::fill_to_paint(&fill, box_rect, ctx.resolver, ctx.pres, part);
@@ -342,6 +352,9 @@ fn emit_geometry(
         }
     }
 
+    if soft_edge.is_some() {
+        dl.push(Command::EndSoftEdge);
+    }
     if shadow.is_some() {
         dl.push(Command::Restore);
     }
@@ -350,14 +363,10 @@ fn emit_geometry(
 /// Converts a shape's resolved effects into a display-list shadow.
 ///
 /// Outer shadow and glow collapse to the same primitive: a glow *is* an outer shadow with
-/// no offset. Soft edges cannot be expressed this way — they need the shape's own alpha
-/// feathered inward, which is a mask operation the display list has no command for — so
-/// they are logged and dropped rather than silently approximated by something that looks
-/// nothing like them.
+/// no offset. Soft edges do not: they feather the shape's own alpha inward, which is a
+/// group operation rather than a per-draw one, and they are emitted as
+/// [`Command::BeginSoftEdge`] by the caller instead.
 fn resolve_shadow(effects: &crate::model::Effects, ctx: &Ctx<'_>) -> Option<crate::dl::Shadow> {
-    if effects.soft_edge.is_some() {
-        log::debug!("soft edges are not rendered; the shape is drawn with hard edges");
-    }
     if let Some(s) = &effects.outer_shadow {
         let distance = emu::to_pt(s.distance);
         let angle = s.direction_deg.to_radians();
@@ -801,6 +810,92 @@ mod tests {
           </p:spPr>
         </p:sp>
       </p:spTree></p:cSld></p:sld>"#;
+
+    /// The rectangle above, with an `<a:effectLst>` spliced into its `spPr`.
+    fn rect_slide_with_effects(effects: &str) -> String {
+        RECT_SLIDE.replace(
+            "<a:solidFill><a:srgbClr val=\"FF0000\"/></a:solidFill>",
+            &format!("<a:solidFill><a:srgbClr val=\"FF0000\"/></a:solidFill>{effects}"),
+        )
+    }
+
+    fn commands_for(effects: &str) -> Vec<Command> {
+        let pres = deck_with_slide(&rect_slide_with_effects(effects));
+        layout_slide(&pres, 0, &StubMeasure)
+            .expect("layout")
+            .commands
+            .clone()
+    }
+
+    #[test]
+    fn a_soft_edge_wraps_the_shape_in_a_group() {
+        // Fill and outline belong inside one group: the fade runs over the silhouette of
+        // the whole shape, so feathering them separately would put a fading edge down the
+        // seam where the outline meets the fill.
+        let cmds = commands_for(r#"<a:effectLst><a:softEdge rad="50800"/></a:effectLst>"#);
+        let begin = cmds
+            .iter()
+            .position(|c| matches!(c, Command::BeginSoftEdge(_)))
+            .expect("no group opened");
+        let end = cmds
+            .iter()
+            .position(|c| matches!(c, Command::EndSoftEdge))
+            .expect("no group closed");
+        let fill = cmds
+            .iter()
+            .position(|c| matches!(c, Command::FillPath { .. }))
+            .expect("nothing filled");
+        assert!(begin < fill && fill < end, "the fill is outside the group");
+        // 50800 EMU is 4pt, and the radius must survive the conversion.
+        assert!(
+            matches!(cmds[begin], Command::BeginSoftEdge(r) if (r - 4.0).abs() < 0.01),
+            "radius lost: {:?}",
+            cmds[begin],
+        );
+    }
+
+    #[test]
+    fn no_soft_edge_means_no_group() {
+        // The group costs an offscreen surface per shape in every backend, so a shape
+        // that did not ask for one must not open one.
+        let cmds = commands_for("");
+        assert!(!cmds
+            .iter()
+            .any(|c| matches!(c, Command::BeginSoftEdge(_) | Command::EndSoftEdge)));
+    }
+
+    #[test]
+    fn a_zero_radius_soft_edge_is_dropped() {
+        // A fade over no distance is no fade; emitting the group would buy a full
+        // offscreen pass and change nothing.
+        let cmds = commands_for(r#"<a:effectLst><a:softEdge rad="0"/></a:effectLst>"#);
+        assert!(!cmds
+            .iter()
+            .any(|c| matches!(c, Command::BeginSoftEdge(_) | Command::EndSoftEdge)));
+    }
+
+    #[test]
+    fn a_soft_edge_sits_inside_the_shadow_scope() {
+        // The shadow is cast *by* the shape, so it must not be feathered along with it,
+        // or it fades away over the same radius and the shape just looks too faint.
+        let cmds = commands_for(
+            r#"<a:effectLst>
+                 <a:outerShdw blurRad="50800" dist="25400" dir="2700000">
+                   <a:srgbClr val="000000"/>
+                 </a:outerShdw>
+                 <a:softEdge rad="38100"/>
+               </a:effectLst>"#,
+        );
+        let shadow = cmds
+            .iter()
+            .position(|c| matches!(c, Command::SetShadow(Some(_))))
+            .expect("no shadow");
+        let begin = cmds
+            .iter()
+            .position(|c| matches!(c, Command::BeginSoftEdge(_)))
+            .expect("no group");
+        assert!(shadow < begin, "the shadow must be set outside the group");
+    }
 
     #[test]
     fn a_rectangle_lands_at_its_emu_position_converted_to_points() {

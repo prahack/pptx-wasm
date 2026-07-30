@@ -32,6 +32,7 @@ pub struct Counts {
     pub images: usize,
     pub clips: usize,
     pub shadows: usize,
+    pub soft_edges: usize,
 }
 
 impl RecordingRenderer {
@@ -88,6 +89,20 @@ impl Renderer for RecordingRenderer {
             Command::Save => {
                 self.line("save");
                 self.depth += 1;
+            }
+            Command::BeginSoftEdge(radius) => {
+                self.line(&format!("beginSoftEdge {radius:.2}"));
+                self.depth += 1;
+                self.counts.soft_edges += 1;
+            }
+            Command::EndSoftEdge => {
+                if self.depth == 0 {
+                    self.unbalanced = true;
+                    self.line("endSoftEdge (UNBALANCED)");
+                } else {
+                    self.depth -= 1;
+                    self.line("endSoftEdge");
+                }
             }
             Command::Restore => {
                 if self.depth == 0 {
@@ -366,6 +381,7 @@ mod tests {
                 images: 1,
                 clips: 0,
                 shadows: 0,
+                soft_edges: 0,
             }
         );
     }

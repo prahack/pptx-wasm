@@ -125,6 +125,15 @@
       "scoreAsReason": "LibreOffice draws action buttons flat, so it cannot adjudicate the bevel.",
       "reason": "The twelve action buttons. NOT compared against the oracle, for the same reason as m5f: LibreOffice renders these as flat rectangles with no bevel at all, while PowerPoint draws them raised and the preset's own pathLst carries lightenLess and darkenLess faces to do it. Diffing against LibreOffice would score the bevel as error and reward removing it — the blank button alone, which has no glyph, differs 11.4% purely because we draw the bevel and it does not. So this compares against a reviewed reference instead, and the tolerance is tight because our own output should be deterministic. The bevel being right is an argument from the spec, not a measurement, and it is one of the things the PowerPoint spot-check in ROADMAP.md should settle.",
       "oracle": false
+    },
+    {
+      "id": "m8",
+      "fixture": "m8-softedge.pptx",
+      "oracle": false,
+      "scoreAs": "excluded",
+      "scoreAsReason": "The oracle implements soft edges differently; see reason.",
+      "maxDiffRatio": 0.005,
+      "reason": "Soft edges at 0, 6 and 18 point radii, plus 6pt paired with a shadow. Not scored against the oracle, and this one is a genuine disagreement rather than the oracle ignoring the feature — LibreOffice implements soft edges, it just reads them differently. Measured across the middle of each shape: at 6pt our ink starts at the shape's outline and reaches full strength 6pt inside it, while LibreOffice's ink starts 6pt *inset* and reaches full strength at 10pt; at 18pt, ours spans 0..186 and solidifies at 18, theirs spans 16..170 and solidifies at 28. So it erodes the silhouette by the radius and then blurs, where we feather inward from the silhouette and keep it. ECMA-376 says only that 'the edges of the shape are blurred', which supports both. Ours is the reading that preserves the shape's bounds, which is what PowerPoint appears to do, but appears is doing a lot of work in that sentence and nobody has checked. Until someone does, scoring against LibreOffice would encode a coin-flip as a requirement, so this compares against a reviewed reference and the question goes on the PowerPoint spot-check list in ROADMAP.md."
     }
   ],
   "_scoreAs": [

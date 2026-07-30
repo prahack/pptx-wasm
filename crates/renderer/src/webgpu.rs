@@ -80,6 +80,13 @@ impl Requirements {
                         r.offscreen_passes += 1;
                     }
                 }
+                // The contents go to a render target, the target's alpha is faded inward
+                // from its own silhouette, and the result is composited back. Costed the
+                // same way as a shadow: one extra pass. It is expressible on a GPU — a
+                // distance-to-edge falloff over the shape's coverage — so it is a cost,
+                // not something the backend would have to refuse.
+                Command::BeginSoftEdge(_) => r.offscreen_passes += 1,
+                Command::EndSoftEdge => {}
                 Command::ClipPath { path, .. } => {
                     r.stencil_clips += 1;
                     r.path_segments += path.verbs.len();

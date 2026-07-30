@@ -34,6 +34,18 @@ pub enum Command {
     /// Sets (or clears) the drop shadow applied to subsequent drawing. Scoped by the
     /// enclosing `Save`/`Restore`, like a clip.
     SetShadow(Option<Shadow>),
+    /// Begins a soft-edged group. Everything up to the matching [`Command::EndSoftEdge`]
+    /// is drawn into its own surface, whose alpha is then faded inward from the edge over
+    /// `radius` points before being composited back.
+    ///
+    /// This is a *group* rather than a state flag, unlike `SetShadow`, because there is no
+    /// way to feather one drawing operation at a time: the fade is over the silhouette of
+    /// everything inside, and a shape's fill and its outline together are one silhouette.
+    /// A backend that cannot render to a separate surface must draw the contents plainly
+    /// rather than skip them — a hard edge is wrong, an invisible shape is worse.
+    BeginSoftEdge(f32),
+    /// Ends the group opened by the nearest unmatched [`Command::BeginSoftEdge`].
+    EndSoftEdge,
     FillPath {
         path: Path,
         paint: Paint,

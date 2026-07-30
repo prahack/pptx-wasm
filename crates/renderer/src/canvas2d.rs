@@ -103,11 +103,25 @@ pub struct Canvas2dRenderer<I: ImageSource<Handle = CanvasImage>> {
     stack: Vec<Transform>,
     /// Backing-store size in device pixels, cleared at the start of each frame.
     pixel_size: (f64, f64),
+    /// Open soft-edge groups, innermost last. Each one redirects drawing to its own
+    /// canvas until the matching `EndSoftEdge` feathers it and composites it back.
+    soft_edges: Vec<SoftEdge>,
+}
+
+/// One open soft-edge group.
+struct SoftEdge {
+    /// Where drawing went before this group opened, and where it goes again after.
+    parent: CanvasRenderingContext2d,
+    /// The surface the group's contents are drawn into.
+    surface: web_sys::HtmlCanvasElement,
+    /// Feather distance in device pixels.
+    radius: f64,
 }
 
 impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
     pub fn new(ctx: CanvasRenderingContext2d, images: I) -> Self {
         Canvas2dRenderer {
+            soft_edges: Vec::new(),
             ctx,
             images,
             root: Transform::IDENTITY,
@@ -133,6 +147,108 @@ impl<I: ImageSource<Handle = CanvasImage>> Canvas2dRenderer<I> {
                 t.a as f64, t.b as f64, t.c as f64, t.d as f64, t.e as f64, t.f as f64,
             )
             .map_err(Error::from)
+    }
+
+    /// A blank canvas the size of the frame's backing store.
+    fn scratch_canvas(&self) -> Result<web_sys::HtmlCanvasElement, Error> {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .ok_or_else(|| Error::from(JsValue::from_str("no document")))?;
+        let canvas: web_sys::HtmlCanvasElement = document
+            .create_element("canvas")
+            .map_err(Error::from)?
+            .dyn_into()
+            .map_err(|_| Error::from(JsValue::from_str("not a canvas")))?;
+        canvas.set_width(self.pixel_size.0.max(1.0) as u32);
+        canvas.set_height(self.pixel_size.1.max(1.0) as u32);
+        Ok(canvas)
+    }
+
+    fn context_of(canvas: &web_sys::HtmlCanvasElement) -> Result<CanvasRenderingContext2d, Error> {
+        canvas
+            .get_context("2d")
+            .map_err(Error::from)?
+            .ok_or_else(|| Error::from(JsValue::from_str("no 2d context")))?
+            .dyn_into()
+            .map_err(|_| Error::from(JsValue::from_str("not a 2d context")))
+    }
+
+    /// Redirects drawing into a fresh surface until the matching end.
+    fn begin_soft_edge(&mut self, radius_pt: f32) -> Result<(), Error> {
+        let radius = (radius_pt * self.current.approx_scale()).max(0.0) as f64;
+        let surface = self.scratch_canvas()?;
+        let ctx = Self::context_of(&surface)?;
+        // The surface is the same size as the frame and drawing continues under the same
+        // transform, so everything inside lands exactly where it would have.
+        let t = self.current;
+        ctx.set_transform(
+            t.a as f64, t.b as f64, t.c as f64, t.d as f64, t.e as f64, t.f as f64,
+        )
+        .map_err(Error::from)?;
+        let parent = core::mem::replace(&mut self.ctx, ctx);
+        self.soft_edges.push(SoftEdge {
+            parent,
+            surface,
+            radius,
+        });
+        Ok(())
+    }
+
+    /// Feathers the group's alpha inward and composites it back.
+    ///
+    /// The mask is `blur(contents)` intersected with `contents`. Blurring alone spreads
+    /// the silhouette outward as much as it softens it inward, which reads as a glow;
+    /// clipping the blurred copy back to the original outline discards the outward half
+    /// and leaves alpha that falls off from the edge toward the interior, which is what a
+    /// soft edge is. Multiplying that into the contents' own alpha leaves the middle
+    /// untouched, because a blurred solid region is still solid away from its boundary.
+    fn end_soft_edge(&mut self) -> Result<(), Error> {
+        let Some(group) = self.soft_edges.pop() else {
+            // Unbalanced list. Draw nothing rather than corrupt the frame.
+            return Ok(());
+        };
+        let contents = core::mem::replace(&mut self.ctx, group.parent);
+
+        if group.radius > 0.0 {
+            let mask_canvas = self.scratch_canvas()?;
+            let mask = Self::context_of(&mask_canvas)?;
+            mask.set_filter(&format!("blur({}px)", group.radius));
+            mask.draw_image_with_html_canvas_element(&group.surface, 0.0, 0.0)
+                .map_err(Error::from)?;
+            mask.set_filter("none");
+            mask.set_global_composite_operation("destination-in")
+                .map_err(Error::from)?;
+            mask.draw_image_with_html_canvas_element(&group.surface, 0.0, 0.0)
+                .map_err(Error::from)?;
+
+            contents
+                .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                .map_err(Error::from)?;
+            contents
+                .set_global_composite_operation("destination-in")
+                .map_err(Error::from)?;
+            contents
+                .draw_image_with_html_canvas_element(&mask_canvas, 0.0, 0.0)
+                .map_err(Error::from)?;
+        }
+
+        // Blit at identity: the surface already holds device-space pixels.
+        self.ctx.save();
+        self.ctx
+            .set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            .map_err(Error::from)?;
+        // Any shadow set before the group is still on this context, and it is applied to
+        // the blit — which is exactly right, and is why the contents were captured into a
+        // context that never had one. The shadow is cast once, by the finished silhouette,
+        // and because that silhouette has already been feathered the shadow softens with
+        // it. Clearing it here instead loses the shadow altogether, since the surface it
+        // would have come from never had one.
+        self.ctx
+            .draw_image_with_html_canvas_element(&group.surface, 0.0, 0.0)
+            .map_err(Error::from)?;
+        self.ctx.restore();
+        self.apply_transform(&self.current)?;
+        Ok(())
     }
 
     fn build_path(&self, path: &Path) -> Result<Path2d, Error> {
@@ -703,6 +819,8 @@ impl<I: ImageSource<Handle = CanvasImage>> Renderer for Canvas2dRenderer<I> {
                     .clip_with_path_2d_and_winding(&p, Self::winding(*rule));
             }
             Command::SetShadow(shadow) => self.set_shadow(shadow.as_ref()),
+            Command::BeginSoftEdge(radius) => self.begin_soft_edge(*radius)?,
+            Command::EndSoftEdge => self.end_soft_edge()?,
             Command::FillPath { path, paint, rule } => self.fill(path, paint, *rule)?,
             Command::StrokePath { path, stroke } => self.stroke(path, stroke)?,
             Command::DrawImage {

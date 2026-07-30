@@ -81,6 +81,12 @@ impl Culler {
                 self.shadow = *s;
                 false
             }
+            // A soft edge only ever shrinks what a shape covers — the fade runs inward
+            // from the silhouette — so nothing inside becomes visible that was not
+            // already. No inflation is needed, unlike a shadow. The markers themselves
+            // must survive: dropping one would leave the backend capturing into a surface
+            // it never composites back, and every later command with it.
+            Command::BeginSoftEdge(_) | Command::EndSoftEdge => false,
             Command::FillPath { path, .. } => {
                 let bounds = self.path_bounds(path, 0.0);
                 self.cull_opt(bounds)

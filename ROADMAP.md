@@ -193,9 +193,37 @@ dedicated `emf-converter` package rather than solving it inline. Options, cheape
 prefer the fallback raster more aggressively; parse the EMF subset that covers pasted
 charts; or treat it as out of scope and document it clearly.
 
+### 7a. Soft edges — ~~**done**~~
+
+`Command::BeginSoftEdge(radius)` / `EndSoftEdge` wrap a shape's fill and outline in a
+group, because the fade runs over the silhouette of the whole shape rather than over each
+drawing operation — feathering them separately would put a fading edge down the seam where
+the outline meets the fill.
+
+canvas2d captures the group into its own surface and builds the mask as
+`blur(contents) ∩ contents`. Blurring alone spreads the silhouette outward as much as it
+softens inward, which reads as a glow; clipping the blurred copy back to the original
+outline discards the outward half and leaves alpha that falls off from the edge inward.
+Multiplying that into the contents' alpha leaves the middle untouched, since a blurred
+solid region is still solid away from its boundary.
+
+The group opens *inside* any shadow scope. The shadow is cast by the shape, so it is
+applied to the composite rather than to the contents — which means a shape with a large
+soft edge and a short shadow throw has no visible shadow at all, because the alpha the
+shadow is cast from is zero at the boundary. That is correct and was initially mistaken
+for a bug.
+
+**We disagree with the oracle here, and it is a real disagreement rather than the oracle
+ignoring the feature.** Measured across the middle of each shape: at 6pt our ink starts at
+the outline and reaches full strength 6pt inside it; LibreOffice's starts 6pt *inset* and
+reaches full strength at 10pt. It erodes by the radius and then blurs; we feather inward
+and keep the silhouette. ECMA-376 says only that "the edges of the shape are blurred",
+which supports both. `m8` therefore scores against a reviewed reference, and this is now
+the fourth question waiting on the PowerPoint spot-check.
+
 ### 7. The remaining coverage gaps
 
-In rough order of how often they appear in real decks: soft edges, 3-D bevels, SmartArt
+In rough order of how often they appear in real decks: 3-D bevels, SmartArt
 (currently falls back to its cached image), OLE embeddings, animations and transitions.
 Animations may be permanently out of scope for a *read-only viewer* — worth deciding
 explicitly rather than leaving on a list forever.
