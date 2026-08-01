@@ -214,6 +214,35 @@ absent here too: the layer can never offer selectable text where nothing was pai
 `next()`, `previous()`, `goTo(index)`, `redraw()`, and the read-only `slide`,
 `slideCount` and `presentation`.
 
+## Finding text
+
+`findSlides` says which slides contain a string; `searchSlide` says where on one of them,
+with the rectangles to draw a highlight.
+
+```ts
+for (const { index, count } of deck.findSlides('revenue')) {
+  console.log(`slide ${index + 1}: ${count} match(es)`);
+}
+
+// Pass the same options you passed to render(), or the boxes will not line up.
+for (const m of deck.searchSlide(1, 'revenue', { width: 960, height: 540, dpr: 1 })) {
+  for (const r of m.rects) ctx.fillRect(r.x, r.y, r.width, r.height);
+}
+```
+
+Case-insensitive by default, and `text` comes back with the slide's casing rather than the
+query's. Matches are positioned by the same walk that painted the glyphs, so a highlight
+cannot land where the text is not.
+
+Two behaviours worth knowing. A match spanning several runs — `the **bold** word` is three
+of them — returns **one rectangle per run**, because a single box across them would cover
+the gaps. And a phrase is never matched across a line break: those words are not adjacent
+on screen, and boxing them as one would cover the unrelated text between them.
+
+`findSlides` is the cheaper call, but it still lays out every slide it has not seen, so on
+a large deck the first call is the expensive one. Drive a result list with it, then ask
+`searchSlide` for boxes only on the slide actually on screen.
+
 ## Loading the WASM module
 
 The package ships `pptx_bg.wasm` as a real file next to the JS rather than inlining it, so

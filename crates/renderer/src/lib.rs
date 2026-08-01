@@ -20,6 +20,7 @@
 
 pub mod cull;
 pub mod record;
+pub mod search;
 pub mod textlayer;
 
 #[cfg(target_arch = "wasm32")]

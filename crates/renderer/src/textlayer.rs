@@ -37,6 +37,12 @@ pub struct PositionedText {
     pub italic: bool,
     /// Clockwise rotation in radians, if the run is not upright.
     pub rotation: f32,
+    /// Per-`char` advance in device pixels, parallel to `text.chars()`.
+    ///
+    /// Empty when layout had no measurer, in which case a caller wanting a sub-run
+    /// rectangle has to fall back to splitting `width` evenly. Carried here so that
+    /// highlighting a match *inside* a run does not need a second measuring pass.
+    pub advances: Vec<f32>,
 }
 
 /// Collects the text of a slide with everything needed to overlay it.
@@ -106,6 +112,7 @@ impl Renderer for TextLayerRenderer {
                     weight: run.font.weight.css_value(),
                     italic: run.font.style == pptx_core::dl::FontStyle::Italic,
                     rotation,
+                    advances: run.advances.iter().map(|a| a * scale).collect(),
                 });
             }
             _ => {}
