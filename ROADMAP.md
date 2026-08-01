@@ -6,23 +6,28 @@ estimate — where something is an estimate it says so.
 
 ## Where we actually stand
 
-Of seven browser pptx renderers, on the 11 fixtures all of them render:
+Of seven browser pptx renderers, on the 14 fixtures all of them render (0.2.0):
 
 | axis | rank | note |
 |---|---|---|
-| warm render | **1 of 7** | 2.0 ms; next is 3.0 ms (@jvmr, at 46.58% structural error) |
-| cold start | 2 of 7 | 31.0 ms; only @jvmr is faster, and it renders far less |
-| fidelity (structure) | **1 of 7** | 1.15% vs @aiden0z's 1.37%; the rest of the field is 12–59% |
+| fidelity (structure) | **1 of 7** | 1.23% against @aiden0z's 1.54%; the rest of the field is 14–57% |
+| warm render | **1 of 7** | 3.0 ms; next is 2.9 ms (@jvmr, at 47.76% structural error) |
+| cold start | 2 of 7 | 36.2 ms; only @jvmr is faster, and it renders far less |
+| payload | 4 of 7 | 328 KB; @jvmr 45 KB, glimpse 167 KB, pptxviewjs 252 KB |
 | fidelity (text) | 5 of 7 | 27.43%, the weakest of the five accurate engines, inside a 3-point band |
-| payload | 4 of 7 | 319 KB; @jvmr 45 KB, glimpse 167 KB, pptxviewjs 252 KB |
 
-Restricted to the five engines that render accurately at all, we are **first on cold and
-first on warm**. So the honest summary is: most accurate on structure, fastest of the
-accurate engines, mid-pack on size, and marginally last on text among that same group.
+Restricted to the five engines that render a deck accurately, this is first on structure
+and first on warm. So: most accurate on structure, fastest of the accurate engines,
+mid-pack on size, and marginally last on text among that same group.
+
+Two things about that table are worth not glossing over. **Payload grew 319 KB → 328 KB in
+0.2.0** — soft edges, the text layer and 34 presets all cost bytes, and nothing was
+watching. And **`m7a` is a fixture written here**, which moves other engines' structural
+figures by up to eleven points; the README prints that column with and without it.
 
 Fidelity is reported split because pooling it destroys the signal: text-dominated fixtures
 put every competent engine within three points of the rest, so averaging them in drags a
-1.15% structural result up to 20% and makes a 50x spread look like a rounding error.
+1.23% structural result up to about 20% and makes a 45x spread look like a rounding error.
 
 That shapes the roadmap. We do not need to get faster. We need to stop losing on size, and
 we need to close the one capability gap that no amount of speed compensates for.
@@ -272,14 +277,47 @@ unnecessary — worth deciding which before building either.
 
 ## Suggested order
 
-0. ~~Flowchart presets~~ — done: 22 implemented, `m7a` fixture added, 19/19 golden green.
-1. ~~CI~~ — done.
-2. `twiggy` measurement, then chart/effects feature flags.
-3. PowerPoint spot-check — resolves the open `m4` question.
-4. Decide SVG backend vs. text-layer overlay, then build the winner.
-5. Wrappers and the hosted demo.
+Everything in P0 has landed. What follows is ordered by value per unit of effort, not by
+section number.
 
----
+**1. The PowerPoint spot-check.** Costs about five minutes and unblocks *four* separate
+questions that are currently arguments from the spec rather than facts:
+
+| question | what is currently assumed |
+|---|---|
+| `m4` text renders ~8% larger in ink than LibreOffice's | that this is font substitution, not a resolution bug |
+| the action-button bevel | that PowerPoint draws one at all, and at the `*Less* shades |
+| `flowChartTerminator`'s cap | elliptical at `0.161w`, where LibreOffice draws a rounded rect |
+| soft-edge falloff | that the fade starts at the outline, where LibreOffice starts it inset |
+
+Export `m2-text.pptx` and `m4-template.pptx` from real PowerPoint, keep the PNGs, compare
+by eye. Nothing else on this list resolves four open questions at once.
+
+**2. Text fidelity.** The one column where this project is *last* among the engines that
+render accurately — 27.43% against pptx-preview's 24.44%. The band is three points wide
+and mostly rasterisation noise, so this may be unfixable, but it is also unexamined. The
+`m4` question above is the obvious thread to pull, which is another reason to do 1 first.
+
+**3. A payload guard in CI.** The module went 319 KB → 328 KB this release without anyone
+noticing until the benchmark was re-run by hand. A CI step that fails when the gzipped
+`.wasm` crosses a committed ceiling would have caught it at the commit that caused it.
+Cheap, and the kind of thing that only gets added after it has already bitten.
+
+**4. Decide SVG backend vs. keeping the overlay.** The overlay works, so this is no longer
+urgent — but an SVG backend also buys server-side thumbnails and print, and would make the
+overlay redundant. Deciding is most of the work; see P2.8 for what the competition's
+hybrid architecture costs.
+
+**5. EMF/WMF.** The largest *silent* gap left. Anything pasted from Excel or older Office
+arrives as a metafile, no browser decodes one, and today those render as nothing where the
+file supplies no fallback raster. A deck can look fine in the fixtures and be missing half
+its content in the wild.
+
+**6. Wrappers and a hosted demo.** `examples/comparison` renders seven engines side by side
+on a deck the user supplies, which is the single most persuasive artefact here and runs
+only on localhost.
+
+**7. 3-D bevels, SmartArt, OLE.** Real gaps, but each is narrower than any of the above.
 
 ## What reading the competition actually taught us
 
