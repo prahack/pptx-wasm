@@ -360,6 +360,66 @@ impl Presentation {
         out
     }
 
+    /// Finds `query` on a slide and returns each match with the rectangles to highlight
+    /// it, as JSON.
+    ///
+    /// Positioned by the same walk that painted the glyphs, so a highlight cannot land
+    /// somewhere the text is not.
+    #[wasm_bindgen(js_name = searchSlide)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_slide(
+        &self,
+        index: usize,
+        query: &str,
+        case_sensitive: bool,
+        viewport_w: f32,
+        viewport_h: f32,
+        dpr: f32,
+        fit: &str,
+        zoom: f32,
+    ) -> String {
+        if self.ensure_layout(index).is_none() {
+            return "[]".into();
+        }
+        let layouts = self.layouts.borrow();
+        let Some(dl) = layouts.get(&index) else {
+            return "[]".into();
+        };
+        let view = View {
+            viewport_w,
+            viewport_h,
+            dpr,
+            fit: parse_fit(fit),
+            zoom: if zoom > 0.0 { zoom } else { 1.0 },
+            ..Default::default()
+        };
+        let mut backend = pptx_renderer::textlayer::TextLayerRenderer::new();
+        if pptx_renderer::render(&mut backend, dl, &view).is_err() {
+            return "[]".into();
+        }
+        let matches = pptx_renderer::search::find(backend.runs(), query, case_sensitive);
+        let mut out = String::from("[");
+        for (i, m) in matches.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, r#"{{"text":"{}","rects":["#, json_escape(&m.text));
+            for (j, r) in m.rects.iter().enumerate() {
+                if j > 0 {
+                    out.push(',');
+                }
+                let _ = write!(
+                    out,
+                    r#"{{"x":{:.2},"y":{:.2},"width":{:.2},"height":{:.2}}}"#,
+                    r.x, r.y, r.w, r.h
+                );
+            }
+            out.push_str("]}");
+        }
+        out.push(']');
+        out
+    }
+
     /// What a WebGPU backend would need for this slide. Exposed so Backend B's cost stays
     /// visible rather than theoretical.
     #[wasm_bindgen(js_name = gpuRequirements)]

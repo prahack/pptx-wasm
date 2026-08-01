@@ -15,6 +15,9 @@ import {
   type RenderOptions,
   type SlideInfo,
   type WasmSource,
+  type SearchMatch,
+  type SearchOptions,
+  type SlideHit,
   type TextLayerRun,
 } from './types.js';
 
@@ -242,6 +245,64 @@ export class Presentation {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Finds `query` on one slide, with the rectangles to highlight each occurrence.
+   *
+   * Pass the same options you passed to {@link render}, or the boxes will not line up.
+   * Matches are positioned by the same walk that painted the glyphs, so a highlight
+   * cannot land where the text is not.
+   *
+   * A phrase is not matched across a line break: the words are not adjacent on screen,
+   * and boxing them as one would cover the unrelated text between them.
+   */
+  searchSlide(index: number, query: string, options: SearchOptions = {}): SearchMatch[] {
+    if (this.#destroyed || !this.#valid(index) || !query) return [];
+    const width = options.width ?? this.slideSize.width;
+    const height = options.height ?? this.slideSize.height;
+    const dpr = options.dpr ?? (globalThis.devicePixelRatio || 1);
+    const json = this.#inner.searchSlide(
+      index,
+      query,
+      options.caseSensitive ?? false,
+      width,
+      height,
+      dpr,
+      options.fit ?? 'contain',
+      options.zoom ?? 1,
+    );
+    try {
+      return JSON.parse(json) as SearchMatch[];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Which slides contain `query`, and how many times.
+   *
+   * Cheaper than {@link searchSlide} per slide — it compares text and never asks for
+   * rectangles — but it still lays out every slide it has not seen, so on a large deck
+   * the first call is the expensive one. Use it to drive a result list, then ask
+   * {@link searchSlide} for boxes only on the slide actually being shown.
+   */
+  findSlides(query: string, options: { caseSensitive?: boolean } = {}): SlideHit[] {
+    if (this.#destroyed || !query) return [];
+    const needle = options.caseSensitive ? query : query.toLowerCase();
+    const hits: SlideHit[] = [];
+    for (let i = 0; i < this.slideCount; i += 1) {
+      const raw = this.text(i);
+      const hay = options.caseSensitive ? raw : raw.toLowerCase();
+      let count = 0;
+      let at = hay.indexOf(needle);
+      while (at !== -1) {
+        count += 1;
+        at = hay.indexOf(needle, at + needle.length);
+      }
+      if (count > 0) hits.push({ index: i, count });
+    }
+    return hits;
   }
 
   /** What a WebGPU backend would need for this slide. Diagnostic. */

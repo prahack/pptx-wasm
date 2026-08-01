@@ -21,6 +21,10 @@ export {
   type PresentationViewerProps,
   type RenderOptions,
   type SlideInfo,
+  type SearchMatch,
+  type SearchOptions,
+  type SlideHit,
   type TextLayerRun,
+  type TextRect,
   type WasmSource,
 } from './types.js';
