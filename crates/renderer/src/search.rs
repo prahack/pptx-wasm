@@ -165,6 +165,7 @@ mod tests {
             weight: 400,
             italic: false,
             rotation: 0.0,
+            link: None,
             advances: vec![width / n as f32; text.chars().count()],
         }
     }

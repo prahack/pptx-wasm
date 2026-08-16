@@ -135,6 +135,13 @@ export interface TextLayerRun {
   italic: boolean;
   /** Clockwise rotation in radians. */
   rotation: number;
+  /**
+   * The URL this run links to, or `null`.
+   *
+   * Only `http`, `https` and `mailto` survive parsing — a deck is untrusted input, and a
+   * `javascript:` target in an `href` is script injection with extra steps.
+   */
+  link: string | null;
 }
 
 /** A rectangle in device pixels. */
