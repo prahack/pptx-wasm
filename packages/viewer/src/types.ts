@@ -136,3 +136,38 @@ export interface TextLayerRun {
   /** Clockwise rotation in radians. */
   rotation: number;
 }
+
+/** A rectangle in device pixels. */
+export interface TextRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One occurrence of a search query on a slide. */
+export interface SearchMatch {
+  /** The matched text as it appears on the slide, which for a case-insensitive search
+   *  is not necessarily what was typed. */
+  text: string;
+  /**
+   * Where to draw the highlight, in device pixels.
+   *
+   * More than one when the match spans several runs — "the **bold** word" is three runs,
+   * and one box across them would swallow the gaps between them.
+   */
+  rects: TextRect[];
+}
+
+/** Options for {@link Presentation.searchSlide}. */
+export interface SearchOptions extends RenderOptions {
+  /** Default false: readers expect find-in-page to ignore case. */
+  caseSensitive?: boolean;
+}
+
+/** A slide that contains the query, from {@link Presentation.findSlides}. */
+export interface SlideHit {
+  index: number;
+  /** How many times the query occurs on it. */
+  count: number;
+}
