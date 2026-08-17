@@ -1,7 +1,7 @@
 # pptx-wasm
 
 [![npm](https://img.shields.io/npm/v/pptx-wasm.svg)](https://www.npmjs.com/package/pptx-wasm)
-[![bundle](https://img.shields.io/badge/gzipped-319%20KB-blue.svg)](#how-it-compares)
+[![bundle](https://img.shields.io/badge/gzipped-332%20KB-blue.svg)](#how-it-compares)
 [![licence](https://img.shields.io/npm/l/pptx-wasm.svg)](LICENSE)
 
 A browser-native, read-only `.pptx` renderer. Rust compiled to WebAssembly does the
@@ -27,6 +27,11 @@ import { PresentationViewer } from 'pptx-wasm/react';
 
 *`m3-shapes.pptx` as this renderer draws it — preset geometry from the ECMA-376 formulas,
 including the lit and shaded faces of `can` and `cube`.*
+
+Beyond drawing, it reports what it drew: selectable text over the canvas, search results
+with the rectangles to highlight them, and the URL on every hyperlinked run — all
+positioned by the same walk that painted the glyphs, so a highlight cannot land where the
+text is not.
 
 **Using the package?** [`packages/viewer/README.md`](packages/viewer/README.md) is the API
 reference. This file is about working on the project; [`ROADMAP.md`](ROADMAP.md) is where
@@ -121,10 +126,11 @@ which number a fixture written here is carrying.
 
 ### Reading it honestly
 
-- **Payload is fourth of seven.** 328 KB is mid-pack, and it grew from 319 KB this
-  release: soft edges, the text layer and 34 new presets all cost bytes. Building without
-  the `charts` and `tables` features takes it to 281 KB — see
-  [Build-time features](#build-time-features).
+- **Payload is fourth of seven, and still growing.** 332 KB as of 0.3.0, up from 328 in
+  0.2.0 and 319 before that — search and hyperlinks each cost a little. The benchmark
+  table below was measured at 328 KB and is not re-run for a documentation change, so
+  treat that column as a release behind. Building without the `charts` and `tables`
+  features takes it to 286 KB — see [Build-time features](#build-time-features).
 - **The structural lead over @aiden0z/pptx-renderer is 1.23% against 1.54%** — real, but
   narrow. That engine is the genuine competition; the rest of the field is not close on
   this axis.
@@ -193,7 +199,7 @@ The Rust core has two default-on Cargo features, for builds that want a smaller 
 wasm-pack build crates/wasm --target web --no-default-features --features panic-hook
 ```
 
-The module is 319.6 KB gzipped with both, 272.9 KB with neither. A build without a feature still parses a deck that
+As of 0.3.0 the module is 323.2 KB gzipped with both and 277.3 KB with neither. A build without a feature still parses a deck that
 uses it and renders everything else on the slide; only that shape's frame is left empty.
 The model and the parser for tables stay either way — they are small, and a shape has to
 be understood in order to be skipped.

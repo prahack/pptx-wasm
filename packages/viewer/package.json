@@ -1,6 +1,6 @@
 {
   "name": "pptx-wasm",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Browser-native, read-only .pptx renderer. Rust/WASM core, canvas output, no server-side conversion and nothing uploaded.",
   "keywords": [
     "pptx",
@@ -51,6 +51,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "publishConfig": {
@@ -61,7 +62,7 @@
     "build": "vite build && tsc -p tsconfig.build.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "cp ../../CHANGELOG.md ./CHANGELOG.md && npm run build"
   },
   "peerDependencies": {
     "react": ">=18",
