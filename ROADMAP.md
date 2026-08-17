@@ -264,6 +264,81 @@ unnecessary — worth deciding which before building either.
 
 ---
 
+## What 1.0 means, and what is missing
+
+A `0.x` version says the API may move. **1.0 is a promise not to break callers**, so the
+question is not "is it good enough" but "is this the surface we are willing to keep".
+Three things have to be true, and none of them are yet.
+
+### 1. We must know we are right, not believe it
+
+Everything is validated against LibreOffice. **Five things are currently arguments from
+the spec rather than measurements**, each recorded where it was decided:
+
+| open question | what we assumed |
+|---|---|
+| `m4` text renders ~8% larger in ink | font substitution, not a resolution bug — *disproved*, it is autofit |
+| `m4` autofit with no `fontScale` | that declining to shrink is right, where LibreOffice shrinks |
+| action-button bevel | that PowerPoint draws one, at the `*Less* shades |
+| `flowChartTerminator` cap | elliptical at `0.161w`, where LibreOffice draws a rounded rect |
+| soft-edge falloff | that the fade starts at the outline, where LibreOffice starts it inset |
+
+Four fixtures are already excluded from oracle scoring because the two implementations
+disagree and neither can be shown right. **Shipping 1.0 on that is shipping guesses as
+guarantees.** Exporting `m2` and `m4` from PowerPoint settles all five in about five
+minutes and is the single highest-value item on this document.
+
+### 2. It must not crash on hostile input
+
+`crates/core/src/lib.rs` denies `unwrap`, `expect` and `panic`, and the release profile
+sets `panic = "abort"`. A `.pptx` is untrusted input off the internet, and **a panic in
+production aborts the WASM module** — the viewer does not degrade, it dies.
+
+The lints prove no *explicit* panic. They say nothing about slice indexing, integer
+overflow, or a truncated ZIP. There is **no `fuzz/` directory**: the central safety claim
+of the crate is untested. `cargo-fuzz` over `Presentation::open` either confirms it or
+finds the counterexample, and until it has run, "never panics" is a hope.
+
+Resource limits are half-built for the same reason. There is a `MAX_PART` of 512 MB on any
+single inflated part — nothing caps the *total* inflated size or the part count, so ten
+thousand ten-megabyte parts pass the guard and take the tab with them.
+
+### 3. The API must be one we would keep
+
+Reviewing what a 1.0 would freeze, three problems:
+
+- **Diagnostics are public.** `debugTrace()` returns the recording backend's text format,
+  and `gpuRequirements()` returns a summary of a backend that does not draw anything.
+  Both are debugging tools whose output is explicitly "do not depend on this". At 1.0
+  they become API. They should move behind a `debug` entry point or off the type.
+- **`PptxError` carries a message and a cause and nothing else.** Ten throw sites collapse
+  into one undifferentiated class, so a caller cannot tell "this is not a pptx" from "the
+  network failed" from "a font would not load" without matching on English prose. That
+  needs a `code` before it is frozen.
+- **The Rust crates are unpublished and unversioned in public.** Fine, but it should be a
+  stated decision: is `pptx-core` a public Rust library with its own compatibility
+  promise, or an implementation detail of the npm package? 1.0 on the npm package while
+  the crates churn is coherent; nobody has said so.
+
+### What 1.0 does *not* require
+
+Feature completeness is not the bar — EMF, SmartArt and 3-D bevels can be missing from a
+1.0 as long as they are **documented as missing**, which they are. A viewer that renders
+most decks correctly and says plainly what it cannot do is a reasonable 1.0. A viewer that
+might panic on a malformed file, or whose bevels are a guess, is not.
+
+### The order
+
+1. PowerPoint spot-check — resolves five questions at once.
+2. `cargo-fuzz` over `Presentation::open`, plus a corpus of real decks nobody here wrote.
+   The flowchart hole proved that fixtures written by the implementer share the
+   implementer's blind spots.
+3. Finish the resource limits: total inflated size and part count.
+4. API review: hide the diagnostics, give `PptxError` a `code`, state the crates' status.
+5. Then 1.0, with the gaps written down.
+
+Everything else on this document — EMF, SmartArt, the SVG backend, wrappers — is 1.x work.
+
 ## Explicitly not doing
 
 - **Getting faster.** We are already first among accurate engines on both timings. Effort
