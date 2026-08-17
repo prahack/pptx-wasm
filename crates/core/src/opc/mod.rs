@@ -176,6 +176,30 @@ impl Package {
         Some(rel.absolute_target.clone())
     }
 
+    /// The URL a relationship points at, when it points outside the package.
+    ///
+    /// The mirror of [`Self::resolve_target`], which deliberately refuses external
+    /// targets because a read-only viewer never fetches one. A hyperlink is the case
+    /// where the *address* is the whole point: nothing is fetched, it is handed to the
+    /// host to put in an `href`.
+    ///
+    /// Only `http`, `https` and `mailto` come back. A relationship can name any scheme,
+    /// and `javascript:` in an `href` the host is about to render is a script injection
+    /// with extra steps — a deck is untrusted input.
+    pub fn resolve_external(&self, part_name: &str, r_id: &str) -> Option<String> {
+        let rels = self.relationships(part_name);
+        let rel = rels.by_id(r_id)?;
+        if rel.target_mode != TargetMode::External {
+            return None;
+        }
+        let target = rel.target.trim();
+        let lower = target.to_ascii_lowercase();
+        let allowed = ["http://", "https://", "mailto:"]
+            .iter()
+            .any(|scheme| lower.starts_with(scheme));
+        allowed.then(|| target.to_string())
+    }
+
     /// The single part related to `part_name` by `rel_type`, if there is exactly one
     /// (slide → layout, layout → master, master → theme all work this way).
     pub fn resolve_single(&self, part_name: &str, rel_type: &str) -> Option<String> {
@@ -190,6 +214,79 @@ impl Package {
 
 #[cfg(test)]
 mod tests {
+
+    /// A package whose slide relates to several external targets.
+    fn deck_with_links() -> Package {
+        use std::io::{Cursor, Write};
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rHttp" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/a?b=1" TargetMode="External"/>
+          <Relationship Id="rMail" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="mailto:someone@example.com" TargetMode="External"/>
+          <Relationship Id="rJs" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="javascript:alert(1)" TargetMode="External"/>
+          <Relationship Id="rFile" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="file:///etc/passwd" TargetMode="External"/>
+          <Relationship Id="rInternal" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slide2.xml"/>
+        </Relationships>"#;
+        let mut buf = Vec::new();
+        {
+            let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
+            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+            w.start_file("[Content_Types].xml", opts).expect("s");
+            w.write_all(
+                br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#,
+            )
+            .expect("w");
+            w.start_file("ppt/slides/_rels/slide1.xml.rels", opts)
+                .expect("s");
+            w.write_all(rels).expect("w");
+            w.finish().expect("f");
+        }
+        Package::open(buf).expect("open")
+    }
+
+    const SLIDE: &str = "ppt/slides/slide1.xml";
+
+    #[test]
+    fn an_external_link_resolves_to_its_url() {
+        let pkg = deck_with_links();
+        assert_eq!(
+            pkg.resolve_external(SLIDE, "rHttp").as_deref(),
+            Some("https://example.com/a?b=1"),
+        );
+        assert_eq!(
+            pkg.resolve_external(SLIDE, "rMail").as_deref(),
+            Some("mailto:someone@example.com"),
+        );
+    }
+
+    #[test]
+    fn a_script_url_is_refused() {
+        // A deck is untrusted input, and the host is about to put this in an href. A
+        // `javascript:` target there is script injection with extra steps, so the scheme
+        // is allow-listed rather than sanitised.
+        let pkg = deck_with_links();
+        assert_eq!(pkg.resolve_external(SLIDE, "rJs"), None);
+        assert_eq!(
+            pkg.resolve_external(SLIDE, "rFile"),
+            None,
+            "no local files either"
+        );
+    }
+
+    #[test]
+    fn resolve_external_and_resolve_target_do_not_overlap() {
+        // Each answers for exactly one kind of target, so a caller cannot accidentally
+        // treat a package part as a URL or the reverse.
+        let pkg = deck_with_links();
+        assert_eq!(pkg.resolve_external(SLIDE, "rInternal"), None);
+        assert!(pkg.resolve_target(SLIDE, "rInternal").is_some());
+        assert_eq!(pkg.resolve_target(SLIDE, "rHttp"), None);
+    }
+
+    #[test]
+    fn an_unknown_relationship_id_is_not_a_link() {
+        let pkg = deck_with_links();
+        assert_eq!(pkg.resolve_external(SLIDE, "rNope"), None);
+    }
+
     use super::*;
     use std::io::Write;
 

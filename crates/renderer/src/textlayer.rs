@@ -37,6 +37,8 @@ pub struct PositionedText {
     pub italic: bool,
     /// Clockwise rotation in radians, if the run is not upright.
     pub rotation: f32,
+    /// The URL this run links to, if any. Already scheme-checked by the parser.
+    pub link: Option<String>,
     /// Per-`char` advance in device pixels, parallel to `text.chars()`.
     ///
     /// Empty when layout had no measurer, in which case a caller wanting a sub-run
@@ -112,6 +114,7 @@ impl Renderer for TextLayerRenderer {
                     weight: run.font.weight.css_value(),
                     italic: run.font.style == pptx_core::dl::FontStyle::Italic,
                     rotation,
+                    link: run.link.clone(),
                     advances: run.advances.iter().map(|a| a * scale).collect(),
                 });
             }
@@ -132,6 +135,7 @@ mod tests {
 
     fn run(text: &str, x: f32, y: f32) -> TextRun {
         let mut t = TextRun {
+            link: None,
             text: text.into(),
             font: FontSpec::new("Calibri", 18.0),
             origin: Point::new(x, y),

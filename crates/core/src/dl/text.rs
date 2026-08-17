@@ -154,6 +154,12 @@ pub struct TextRun {
     pub decorations: Decorations,
     /// Extra tracking added after each character, in points.
     pub letter_spacing: f32,
+    /// The URL this run links to, already resolved and scheme-checked.
+    ///
+    /// Carried on the run rather than as a command, because a link is a property of the
+    /// text and not a drawing operation — the renderer ignores it, and a host that wants
+    /// clickable links reads it off the text layer alongside the rectangles.
+    pub link: Option<String>,
 }
 
 impl TextRun {

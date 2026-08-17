@@ -287,7 +287,7 @@ fn emit_shape(
 
     if let Some(body) = &shape.text {
         if !body.is_empty() {
-            emit_text(ctx, shape, &ancestors, box_rect, dl);
+            emit_text(ctx, shape, &ancestors, box_rect, part, dl);
         }
     }
 
@@ -581,10 +581,11 @@ fn emit_text(
     shape: &Shape,
     ancestors: &[Rc<Shape>],
     box_rect: Rect,
+    part: &str,
     dl: &mut DisplayList,
 ) {
     let Some(body) = &shape.text else { return };
-    let styled = build_paragraphs(ctx, shape, ancestors, body);
+    let styled = build_paragraphs(ctx, shape, ancestors, body, part);
 
     // Custom geometry can narrow where text goes; presets use the whole box.
     let inner = geom::text_rect(&shape.geometry, box_rect.w, box_rect.h);
@@ -610,6 +611,9 @@ fn build_paragraphs(
     shape: &Shape,
     ancestors: &[Rc<Shape>],
     body: &crate::model::TextBody,
+    // A hyperlink is a relationship id, and relationships resolve against the part that
+    // owns them — the same rId means different things on two different slides.
+    part: &str,
 ) -> Vec<StyledParagraph> {
     let mut out = Vec::with_capacity(body.paragraphs.len());
     // Auto-numbered lists restart per level whenever a shallower paragraph intervenes.
@@ -649,6 +653,10 @@ fn build_paragraphs(
                         letter_spacing,
                         baseline_shift: resolved.baseline.unwrap_or(0.0),
                         is_break: false,
+                        link: resolved
+                            .hyperlink
+                            .as_deref()
+                            .and_then(|rid| ctx.pres.package().resolve_external(part, rid)),
                     });
                 }
             }

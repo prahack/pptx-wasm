@@ -26,11 +26,14 @@ pub struct StyledFragment {
     pub baseline_shift: f32,
     /// True when this fragment is an explicit `<a:br/>` rather than text.
     pub is_break: bool,
+    /// Resolved hyperlink URL, if this run carries one.
+    pub link: Option<String>,
 }
 
 impl StyledFragment {
     pub fn text_break(font: FontSpec, paint: Paint) -> Self {
         StyledFragment {
+            link: None,
             text: String::new(),
             font,
             paint,
@@ -528,6 +531,9 @@ fn emit_paragraph(
                 let bullet_x = content.x + para.margin_left + para.indent.max(-para.margin_left);
                 let bullet_width_pt = measure.measure(&b.text, &b.font).width;
                 out.push(Command::DrawText(TextRun {
+                    // A bullet glyph is not part of the linked text, even when the
+                    // paragraph it introduces is entirely a link.
+                    link: None,
                     text: b.text.clone(),
                     font: b.font.clone(),
                     origin: Point::new(bullet_x, baseline),
@@ -584,6 +590,7 @@ fn emit_paragraph(
                 ),
             );
             out.push(Command::DrawText(TextRun {
+                link: frag.link.clone(),
                 text,
                 font: frag.font.clone(),
                 origin: Point::new(x, baseline - shift),
@@ -654,6 +661,9 @@ pub fn bullet_fragment(
     );
     font.fallbacks = crate::text::fallbacks_for(&font.family);
     Some(StyledFragment {
+        // The bullet glyph is not part of the linked text, even when the paragraph it
+        // introduces is entirely a link.
+        link: None,
         text,
         font,
         paint: text_paint.clone(),
@@ -724,6 +734,7 @@ mod tests {
 
     fn frag(text: &str, size: f32) -> StyledFragment {
         StyledFragment {
+            link: None,
             text: text.to_string(),
             font: FontSpec::new("Arial", size),
             paint: Paint::Solid(Color::BLACK),

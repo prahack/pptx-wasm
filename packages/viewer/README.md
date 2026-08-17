@@ -66,6 +66,7 @@ gives the table both with and without it.
 | **Shapes** | ~110 preset geometries including the full flowchart and action-button families, custom geometry (including the DrawingML formula language), connectors, nested groups with rotation and flips |
 | **Fills** | solid, linear and radial gradients (including on text), picture fills stretched or tiled, preset hatch patterns, transparency |
 | **Images** | PNG, JPEG, GIF, BMP, WebP, SVG, with `srcRect` cropping and shape-clipping |
+| **Links** | hyperlinks on text runs, reported with their rectangles |
 | **Inheritance** | the full chain: shape → placeholder → layout → master → theme, with colour maps and theme fonts |
 | **Tables** | grids, merged cells, borders, and PowerPoint's built-in table styles |
 | **Charts** | bar, column, line, area, pie, doughnut and scatter, with axes, gridlines and legends |
@@ -242,6 +243,27 @@ on screen, and boxing them as one would cover the unrelated text between them.
 `findSlides` is the cheaper call, but it still lays out every slide it has not seen, so on
 a large deck the first call is the expensive one. Drive a result list with it, then ask
 `searchSlide` for boxes only on the slide actually on screen.
+
+## Hyperlinks
+
+Every run on the text layer carries the URL it links to, or `null`:
+
+```ts
+for (const r of deck.textLayer(0, { width: 960, height: 540, dpr: 1 })) {
+  if (r.link) {
+    // r.x, r.y (baseline), r.width and r.size bound the clickable area
+    console.log(r.text, '->', r.link);
+  }
+}
+```
+
+Only `http`, `https` and `mailto` survive parsing. A deck is untrusted input and the URL
+is about to go in an `href`, so schemes are allow-listed rather than sanitised —
+`javascript:` and `file:` come back as `null`.
+
+The renderer does not draw links or make them clickable; it tells you where they are.
+Turning them into anchors is the host's job, and `selectableText` already puts a
+positioned element over each run if you want somewhere to hang one.
 
 ## Loading the WASM module
 

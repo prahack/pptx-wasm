@@ -339,6 +339,9 @@ fn cell_paragraphs(
                 continue;
             }
             fragments.push(StyledFragment {
+                // Table cell text can carry a hyperlink in the file; threading the cell's
+                // owning part through to here is follow-up work, not a silent decision.
+                link: None,
                 text: raw.to_string(),
                 font,
                 paint,

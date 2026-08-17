@@ -281,6 +281,7 @@ mod tests {
     fn text(s: &str, family: &str, with_advances: bool) -> Command {
         let n = s.chars().count();
         Command::DrawText(TextRun {
+            link: None,
             text: s.into(),
             font: FontSpec::new(family, 12.0),
             origin: Point::new(0.0, 0.0),

@@ -257,6 +257,7 @@ mod tests {
 
     fn text(x: f32, y: f32) -> Command {
         Command::DrawText(TextRun {
+            link: None,
             text: "hello".into(),
             font: pptx_core::dl::FontSpec::new("Arial", 12.0),
             origin: Point::new(x, y),

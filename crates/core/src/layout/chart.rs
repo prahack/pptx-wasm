@@ -92,6 +92,8 @@ pub fn layout_chart(
         let width = measure.measure(&title, &font).width;
         let metrics = measure.font_metrics(&font);
         out.push(Command::DrawText(crate::dl::TextRun {
+            // Chart labels come from chart.xml, which has no hyperlink of its own.
+            link: None,
             text: title.clone(),
             font: font.clone(),
             origin: Point::new(area.x + (area.w - width) / 2.0, area.y + metrics.ascent),
@@ -231,6 +233,8 @@ impl Ctx<'_> {
             LabelAlign::Right => x - measured.width,
         };
         out.push(Command::DrawText(crate::dl::TextRun {
+            // Chart labels come from chart.xml, which has no hyperlink of its own.
+            link: None,
             text: text.to_string(),
             font,
             origin: Point::new(x, y),

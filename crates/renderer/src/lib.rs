@@ -168,6 +168,7 @@ mod tests {
 
     fn text_run(family: &str, size: f32) -> TextRun {
         TextRun {
+            link: None,
             text: "x".into(),
             font: FontSpec::new(family, size),
             origin: Point::new(0.0, 0.0),

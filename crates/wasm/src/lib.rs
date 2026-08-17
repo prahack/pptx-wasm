@@ -343,7 +343,7 @@ impl Presentation {
                 out,
                 concat!(
                     r#"{{"text":"{}","x":{:.2},"y":{:.2},"width":{:.2},"size":{:.2},"#,
-                    r#""family":"{}","weight":{},"italic":{},"rotation":{:.4}}}"#
+                    r#""family":"{}","weight":{},"italic":{},"rotation":{:.4},"link":{}}}"#
                 ),
                 json_escape(&r.text),
                 r.x,
@@ -354,6 +354,10 @@ impl Presentation {
                 r.weight,
                 r.italic,
                 r.rotation,
+                match &r.link {
+                    Some(u) => format!("\"{}\"", json_escape(u)),
+                    None => "null".into(),
+                },
             );
         }
         out.push(']');
